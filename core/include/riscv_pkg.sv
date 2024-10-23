@@ -631,11 +631,6 @@ package riscv;
     CSR_MHPM_COUNTER_29H = 12'hB9D,  // reserved
     CSR_MHPM_COUNTER_30H = 12'hB9E,  // reserved
     CSR_MHPM_COUNTER_31H = 12'hB9F,  // reserved
-    // Cache Control (platform specifc)
-    CSR_DCACHE           = 12'h7C1,
-    CSR_ICACHE           = 12'h7C0,
-    // Accelerator memory consistency (platform specific)
-    CSR_ACC_CONS         = 12'h7C2,
     // Triggers
     CSR_TSELECT          = 12'h7A0,
     CSR_TDATA1           = 12'h7A1,
@@ -647,6 +642,15 @@ package riscv;
     CSR_DPC              = 12'h7b1,
     CSR_DSCRATCH0        = 12'h7b2,  // optional
     CSR_DSCRATCH1        = 12'h7b3,  // optional
+    // Cache Control (platform specifc)
+    CSR_DCACHE           = 12'h7C1,
+    CSR_ICACHE           = 12'h7C0,
+    // Accelerator memory consistency (platform specific)
+    CSR_ACC_CONS         = 12'h7C2,
+    // Cycle accounting registers
+    CSR_CNT_STATUS       = 12'h7C3,
+    CSR_CNT_DATA         = 12'h7C4,
+    CSR_CNT_DATA_H       = 12'h7C5,
     // Counters and Timers from Zicntr extension (User Mode - R/O Shadows)
     CSR_CYCLE            = 12'hC00,
     CSR_CYCLEH           = 12'hC80,

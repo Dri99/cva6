@@ -582,6 +582,10 @@ package ariane_pkg;
   localparam int unsigned MHPMCounterNum = 6;
 
   // --------------------
+  // Thread account timers
+  // --------------------
+  localparam int unsigned CycAccountRegs = 8;
+  // --------------------
   // Atomics
   // --------------------
   typedef enum logic [3:0] {

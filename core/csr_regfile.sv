@@ -162,6 +162,15 @@ module csr_regfile
     input logic [CVA6Cfg.XLEN-1:0] perf_data_i,
     // TO_BE_COMPLETED - PERF_COUNTERS
     output logic perf_we_o,
+    // Cycle Counter
+    // read/write address to cycle counter module - CYC_COUNTERS
+    output logic [11:0] cyc_addr_o,
+    // write data to cycle counter module - CYC_COUNTERS
+    output logic [CVA6Cfg.XLEN-1:0] cyc_data_o,
+    // read data from cycle counter module - CYC_COUNTERS
+    input logic [CVA6Cfg.XLEN-1:0] cyc_data_i,
+    // write enable to cycle counter module - CYC_COUNTERS
+    output logic cyc_we_o,
     // PMP configuration containing pmpcfg for max 64 PMPs - ACC_DISPATCHER
     output riscv::pmpcfg_t [CVA6Cfg.NrPMPEntries-1:0] pmpcfg_o,
     // PMP addresses - ACC_DISPATCHER
@@ -269,6 +278,7 @@ module csr_regfile
   logic [CVA6Cfg.XLEN-1:0] icache_q, icache_d;
   logic [CVA6Cfg.XLEN-1:0] acc_cons_q, acc_cons_d;
 
+  
   logic wfi_d, wfi_q;
 
   logic [63:0] cycle_q, cycle_d;
@@ -328,6 +338,7 @@ module csr_regfile
     virtual_read_access_exception = 1'b0;
     csr_rdata = '0;
     perf_addr_o = csr_addr.address[11:0];
+    cyc_addr_o = csr_addr.address[11:0];
 
     if (csr_read) begin
       unique case (conv_csr_addr.address)
@@ -757,6 +768,13 @@ module csr_regfile
             read_access_exception = 1'b1;
           end
         end
+        riscv::CSR_CNT_STATUS,
+        riscv::CSR_CNT_DATA: 
+          csr_rdata = cyc_data_i;
+        riscv::CSR_CNT_DATA_H: begin
+          if (CVA6Cfg.XLEN == 32) csr_rdata = cyc_data_i;
+          else read_access_exception = 1'b1;
+        end
         // PMPs
         riscv::CSR_PMPCFG0,
                 riscv::CSR_PMPCFG1,
@@ -910,6 +928,9 @@ module csr_regfile
 
     perf_we_o                       = 1'b0;
     perf_data_o                     = 'b0;
+
+    cyc_we_o                        = 1'b0;
+    cyc_data_o                      = 'b0; 
 
     fcsr_d                          = fcsr_q;
 
@@ -1611,6 +1632,16 @@ module csr_regfile
           end else begin
             update_access_exception = 1'b1;
           end
+        end
+        riscv::CSR_CNT_STATUS,
+        riscv::CSR_CNT_DATA: begin
+          cyc_we_o   = 1'b1;
+          cyc_data_o = csr_wdata;
+        end
+        riscv::CSR_CNT_DATA_H: begin
+          cyc_we_o = 1'b1;
+          if (CVA6Cfg.XLEN == 32) cyc_data_o = csr_wdata;
+          else update_access_exception = 1'b1;
         end
         // PMP locked logic
         // 1. refuse to update any locked entry

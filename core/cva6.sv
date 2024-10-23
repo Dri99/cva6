@@ -569,6 +569,12 @@ module cva6
   logic [11:0] addr_csr_perf;
   logic [CVA6Cfg.XLEN-1:0] data_csr_perf, data_perf_csr;
   logic we_csr_perf;
+  // ----------------------------
+  // Cycle Counters <-> *
+  // ----------------------------
+  logic [11:0] addr_csr_cyc;
+  logic [CVA6Cfg.XLEN-1:0] data_csr_cyc, data_cyc_csr;
+  logic we_csr_cyc;
 
   logic icache_flush_ctrl_cache;
   logic itlb_miss_ex_perf;
@@ -1144,6 +1150,10 @@ module cva6
       .perf_data_o             (data_csr_perf),
       .perf_data_i             (data_perf_csr),
       .perf_we_o               (we_csr_perf),
+      .cyc_addr_o              (addr_csr_cyc),
+      .cyc_we_o                (we_csr_cyc),
+      .cyc_data_o              (data_csr_cyc),
+      .cyc_data_i              (data_cyc_csr),
       .pmpcfg_o                (pmpcfg),
       .pmpaddr_o               (pmpaddr),
       .mcountinhibit_o         (mcountinhibit_csr_perf),
@@ -1204,6 +1214,23 @@ module cva6
     assign data_perf_csr = '0;
   end : gen_no_perf_counter
 
+  // ------------------------
+  // Cycle Counters
+  // ------------------------
+  
+  cyc_counters #(
+      .CVA6Cfg(CVA6Cfg),
+      .CycAccountRegs(CycAccountRegs)
+  ) cyc_counters_i (
+      .clk_i         (clk_i),
+      .rst_ni        (rst_ni),
+      .debug_mode_i  (debug_mode),
+      .addr_i        (addr_csr_cyc),
+      .we_i          (we_csr_cyc),
+      .data_i        (data_csr_cyc),
+      .data_o        (data_cyc_csr)
+  );
+  
   // ------------
   // Controller
   // ------------
