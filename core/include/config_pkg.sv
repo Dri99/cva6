@@ -166,6 +166,8 @@ package config_pkg;
     int unsigned                 FetchUserEn;
     // Width of fetch user field
     int unsigned                 FetchUserWidth;
+    // Interrupt optimisation to automaticlly save context 
+    bit                          ShadowEn;
     // Is FPGA optimization of CV32A6
     bit                          FpgaEn;
     // Is Techno Cut instanciated
@@ -211,6 +213,7 @@ package config_pkg;
     int unsigned ASID_WIDTH;
     int unsigned VMID_WIDTH;
 
+    bit ShadowEn;
     bit FpgaEn;
     bit TechnoCut;
 

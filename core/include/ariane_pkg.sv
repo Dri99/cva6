@@ -326,6 +326,8 @@ package ariane_pkg;
     LB,
     SB,
     LBU,
+    //Shadow Register Store
+    SHSR,
     // Hypervisor Virtual-Machine Load and Store Instructions
     HLV_B,
     HLV_BU,

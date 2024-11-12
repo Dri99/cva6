@@ -36,7 +36,7 @@ jump01:
   c.j jump01
 
 jump02:
-  c.jal jump02
+  jal jump02
 
   #End of test
   j test_done

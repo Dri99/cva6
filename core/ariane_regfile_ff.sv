@@ -25,6 +25,7 @@
 module ariane_regfile #(
     parameter config_pkg::cva6_cfg_t CVA6Cfg       = config_pkg::cva6_cfg_empty,
     parameter int unsigned           DATA_WIDTH    = 32,
+    parameter int unsigned           ADDR_WIDTH    = 5,
     parameter int unsigned           NR_READ_PORTS = 2,
     parameter bit                    ZERO_REG_ZERO = 0
 ) (
@@ -39,14 +40,30 @@ module ariane_regfile #(
     // write port
     input  logic [CVA6Cfg.NrCommitPorts-1:0][           4:0] waddr_i,
     input  logic [CVA6Cfg.NrCommitPorts-1:0][DATA_WIDTH-1:0] wdata_i,
-    input  logic [CVA6Cfg.NrCommitPorts-1:0]                 we_i
+    input  logic [CVA6Cfg.NrCommitPorts-1:0]                 we_i,
+    // shadow csr registers
+    input logic                    shadow_csr_save_i,
+    input logic [CVA6Cfg.XLEN-1:0] shadow_mepc_i,
+    input logic [CVA6Cfg.XLEN-1:0] shadow_mcause_i,
+    // shadow csr registers
+    input logic                    shadow_save_i,
+    // shadow registers - read port
+    input  logic [ADDR_WIDTH-1:0] shadow_raddr_i,
+    output logic [DATA_WIDTH-1:0] shadow_rdata_o,
+    output logic [DATA_WIDTH-1:0] shadow_sp_o
 );
 
-  localparam ADDR_WIDTH = 5;
   localparam NUM_WORDS = 2 ** ADDR_WIDTH;
+  localparam NUM_WORDS_SHADOW = 16;
 
   logic [            NUM_WORDS-1:0][DATA_WIDTH-1:0] mem;
   logic [CVA6Cfg.NrCommitPorts-1:0][ NUM_WORDS-1:0] we_dec;
+
+  // shadow integer register file
+  logic [NUM_WORDS_SHADOW-1:0][DATA_WIDTH-1:0] mem_shadow;
+  // shadow csrs
+  logic [DATA_WIDTH-1:0]             shadow_mepc;
+  logic [DATA_WIDTH-1:0]             shadow_mcause;
 
 
   always_comb begin : we_decoder
@@ -65,7 +82,12 @@ module ariane_regfile #(
     end else begin
       for (int unsigned j = 0; j < CVA6Cfg.NrCommitPorts; j++) begin
         for (int unsigned i = 0; i < NUM_WORDS; i++) begin
-          if (we_dec[j][i]) begin
+          if (i == 2 && shadow_save_i) begin
+            // shadow register save bumps the stack pointer too
+            // TODO: if a write happens to sp at the same time as a
+            // shadow_save_i request, we might lose the write..
+            mem[i] <= mem[i] - NUM_WORDS_SHADOW * (CVA6Cfg.XLEN / 8);
+          end else if (we_dec[j][i]) begin
             mem[i] <= wdata_i[j];
           end
         end
@@ -79,5 +101,44 @@ module ariane_regfile #(
   for (genvar i = 0; i < NR_READ_PORTS; i++) begin
     assign rdata_o[i] = mem[raddr_i[i]];
   end
+
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if(~rst_ni) begin
+      mem_shadow <= '0;
+    end else begin
+      if (shadow_save_i) begin
+          mem_shadow[0] <= mem[1];
+          mem_shadow[1] <= mem[5];
+          mem_shadow[2] <= mem[6];
+          mem_shadow[3] <= mem[7];
+          mem_shadow[4] <= mem[10];
+          mem_shadow[5] <= mem[11];
+          mem_shadow[6] <= mem[12];
+          mem_shadow[7] <= mem[13];
+          mem_shadow[8] <= mem[14];
+          mem_shadow[9] <= mem[15];
+          mem_shadow[10] <= mem[16];
+          mem_shadow[11] <= mem[17];
+          mem_shadow[12] <= mem[28];
+          mem_shadow[13] <= mem[29];
+          mem_shadow[14] <= mem[30];
+          mem_shadow[15] <= mem[31];
+      end 
+    end
+  end
+  
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (~rst_ni) begin
+      shadow_mepc   <= '0;
+      shadow_mcause <= '0;
+    end else begin
+      if (shadow_csr_save_i) begin
+        shadow_mepc   <= shadow_mepc_i;
+        shadow_mcause <= shadow_mcause_i;
+      end
+    end
+  end
+  assign shadow_rdata_o = mem_shadow[shadow_raddr_i];
+  assign shadow_sp_o    = mem[2];
 
 endmodule

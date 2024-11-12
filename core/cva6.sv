@@ -439,6 +439,12 @@ module cva6
   logic load_valid_ex_id;
   exception_t load_exception_ex_id;
 
+  logic [CVA6Cfg.XLEN-1:0] shadow_mepc_csr_id;
+  logic [CVA6Cfg.XLEN-1:0] shadow_mcause_csr_id;
+  logic     shru_valid_id_ex;
+  fu_data_t shru_fu_data_id_ex;
+  logic     shru_store_valid_ex_id;
+
   logic [CVA6Cfg.XLEN-1:0] store_result_ex_id;
   logic [CVA6Cfg.TRANS_ID_BITS-1:0] store_trans_id_ex_id;
   logic store_valid_ex_id;
@@ -809,6 +815,7 @@ module cva6
       .flush_unissued_instr_i  (flush_unissued_instr_ctrl_id),
       .flush_i                 (flush_ctrl_id),
       .stall_i                 (stall_acc_id),
+      .ex_valid_i              (ex_commit.valid),
       // ID Stage
       .decoded_instr_i         (issue_entry_id_issue),
       .orig_instr_i            (orig_instr_id_issue),
@@ -833,6 +840,12 @@ module cva6
       // LSU
       .lsu_ready_i             (lsu_ready_ex_id),
       .lsu_valid_o             (lsu_valid_id_ex),
+      // Shadow Register unit
+      .shadow_mepc_i           (shadow_mepc_csr_id),
+      .shadow_mcause_i         (shadow_mcause_csr_id),
+      .shru_valid_o            (shru_valid_id_ex),
+      .shru_fu_data_o          (shru_fu_data_id_ex),
+      .shru_store_valid_i      (shru_store_valid_ex_id),
       // Multiplier
       .mult_valid_o            (mult_valid_id_ex),
       // FPU
@@ -953,6 +966,10 @@ module cva6
       .commit_tran_id_i        (lsu_commit_trans_id),            // from commit
       .stall_st_pending_i      (stall_st_pending_ex),
       .no_st_pending_o         (no_st_pending_ex),
+      //Shadow Register Unit
+      .shru_valid_i            (shru_valid_id_ex),
+      .shru_fu_data_i          (shru_fu_data_id_ex),
+      .shru_store_valid_o      (shru_store_valid_ex_id),
       // FPU
       .fpu_ready_o             (fpu_ready_ex_id),
       .fpu_valid_i             (fpu_valid_id_ex),
@@ -1156,6 +1173,8 @@ module cva6
       .cyc_data_i              (data_cyc_csr),
       .pmpcfg_o                (pmpcfg),
       .pmpaddr_o               (pmpaddr),
+      .shadow_mepc_o           (shadow_mepc_csr_id),
+      .shadow_mcause_o         (shadow_mcause_csr_id),
       .mcountinhibit_o         (mcountinhibit_csr_perf),
       //RVFI
       .rvfi_csr_o              (rvfi_csr),

@@ -45,6 +45,7 @@ module store_buffer
     input logic [CVA6Cfg.XLEN-1:0] data_i,  // data which is placed in the queue
     input logic [(CVA6Cfg.XLEN/8)-1:0] be_i,  // byte enable in
     input logic [1:0] data_size_i,  // type of request we are making (e.g.: bytes to write)
+    input logic commit_unneeded_i,    // request can go without receiving a commit
 
     // D$ interface
     input  dcache_req_o_t req_port_i,
@@ -91,7 +92,7 @@ module store_buffer
     speculative_queue_n         = speculative_queue_q;
     // LSU interface
     // we are ready to accept a new entry and the input data is valid
-    if (valid_i) begin
+    if (valid_i && !commit_unneeded_i) begin
       speculative_queue_n[speculative_write_pointer_q].address = paddr_i;
       speculative_queue_n[speculative_write_pointer_q].data = data_i;
       speculative_queue_n[speculative_write_pointer_q].be = be_i;
@@ -124,8 +125,6 @@ module store_buffer
       speculative_status_cnt_n = 'b0;
     end
 
-    // we are ready if the speculative and the commit queue have a space left
-    ready_o = (speculative_status_cnt_n < (DEPTH_SPEC)) || commit_i;
   end
 
   // ----------------------------------------
@@ -187,11 +186,28 @@ module store_buffer
       commit_queue_n[commit_write_pointer_q] = speculative_queue_q[speculative_read_pointer_q];
       commit_write_pointer_n = commit_write_pointer_n + 1'b1;
       commit_status_cnt++;
+    end else if(valid_i && commit_unneeded_i && commit_ready_o) begin 
+      commit_queue_n[commit_write_pointer_q].address = paddr_i;
+      commit_queue_n[commit_write_pointer_q].data = data_i;
+      commit_queue_n[commit_write_pointer_q].be = be_i;
+      commit_queue_n[commit_write_pointer_q].data_size = data_size_i;
+      commit_queue_n[commit_write_pointer_q].valid = 1'b1;
+      commit_write_pointer_n = commit_write_pointer_n + 1'b1;
+      commit_status_cnt++;
     end
 
     commit_status_cnt_n = commit_status_cnt;
   end
 
+  always_comb begin : ready_o_generation
+    if(!commit_unneeded_i)
+      // we are ready if the speculative and the commit queue have a space left
+      ready_o = (speculative_status_cnt_n < (DEPTH_SPEC)) || commit_i;
+    else
+      // or if the commit queue has space and no shift happens from speculative to commit
+      // commit_i gives precedence to standard stores
+      ready_o = (commit_status_cnt_n < (DEPTH_COMMIT) || req_port_i.data_gnt) && !commit_i;
+  end
   // ------------------
   // Address Checker
   // ------------------
@@ -286,6 +302,8 @@ module store_buffer
   commit_buffer_overflow :
   assert property (@(posedge clk_i) rst_ni && (commit_status_cnt_q == DEPTH_COMMIT) |-> !commit_i)
   else $error("[Commit Queue] You are trying to commit a store although the buffer is full");
+
+  //assert property (commit_ready_o && commit_i ready_o  ! commit_unneeded_i | (commit_unneeded_i & (valid_i & commit_ready_o) | )
   //pragma translate_on
 endmodule
 

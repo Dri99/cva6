@@ -33,7 +33,7 @@ module load_store_unit
     input logic rst_ni,
     // TO_BE_COMPLETED - TO_BE_COMPLETED
     input logic flush_i,
-    // TO_BE_COMPLETED - TO_BE_COMPLETED
+    // TO_BE_COMPLETED - TO_BE_COMPLETED // Stuff for ACC-dispatcher
     input logic stall_st_pending_i,
     // TO_BE_COMPLETED - TO_BE_COMPLETED
     output logic no_st_pending_o,
@@ -65,6 +65,13 @@ module load_store_unit
     output logic store_valid_o,
     // Store exception - ISSUE_STAGE
     output exception_t store_exception_o,
+
+    // FU data from SHReg Unit is valid - ISSUE STAGE 
+    input logic shru_valid_i,
+    // FU data for storing shadow regs - ISSUE STAGE
+    input fu_data_t shru_fu_data_i,
+    // Store of shadow register is valid - ISSUE STAGE
+    output logic shru_store_valid_o,
 
     // Commit the first pending store - TO_BE_COMPLETED
     input logic commit_i,
@@ -171,6 +178,14 @@ module load_store_unit
   logic                             pop_ld;
 
   // ------------------------------
+  // Fu data selection
+  // ------------------------------
+  fu_data_t fu_data_sel;
+  logic     lsu_bypass_req;
+
+  assign fu_data_sel = lsu_valid_i ? fu_data_i : shru_fu_data_i;
+  assign lsu_bypass_req = lsu_valid_i | shru_valid_i;
+  // ------------------------------
   // Address Generation Unit (AGU)
   // ------------------------------
   // virtual address as calculated by the AGU in the first cycle
@@ -180,7 +195,7 @@ module load_store_unit
   logic                             g_overflow;
   logic      [(CVA6Cfg.XLEN/8)-1:0] be_i;
 
-  assign vaddr_xlen = $unsigned($signed(fu_data_i.imm) + $signed(fu_data_i.operand_a));
+  assign vaddr_xlen = $unsigned($signed(fu_data_sel.imm) + $signed(fu_data_sel.operand_a));
   assign vaddr_i = vaddr_xlen[CVA6Cfg.VLEN-1:0];
   // we work with SV39 or SV32, so if VM is enabled, check that all bits [XLEN-1:38] or [XLEN-1:31] are equal
   assign overflow = (CVA6Cfg.IS_XLEN64 && (!((&vaddr_xlen[CVA6Cfg.XLEN-1:CVA6Cfg.SV-1]) == 1'b1 || (|vaddr_xlen[CVA6Cfg.XLEN-1:CVA6Cfg.SV-1]) == 1'b0)));
@@ -191,6 +206,7 @@ module load_store_unit
   end
 
   logic                    st_valid_i;
+  logic                    st_shadow_valid;
   logic                    ld_valid_i;
   logic                    ld_translation_req;
   logic                    st_translation_req;
@@ -356,6 +372,7 @@ module load_store_unit
       .commit_ready_o,
       .amo_valid_commit_i,
 
+      .commit_ready_shadow_st_o(st_shadow_valid),
       .valid_o              (st_valid),
       .trans_id_o           (st_trans_id),
       .result_o             (st_result),
@@ -439,13 +456,13 @@ module load_store_unit
   );
 
   shift_reg #(
-      .dtype(logic [$bits(st_valid) + $bits(st_trans_id) + $bits(st_result) + $bits(st_ex) - 1:0]),
+      .dtype(logic [$bits(st_valid) + $bits(st_trans_id) + $bits(st_result) + $bits(st_ex) + $bits(st_shadow_valid)- 1:0]),
       .Depth(CVA6Cfg.NrStorePipeRegs)
   ) i_pipe_reg_store (
       .clk_i,
       .rst_ni,
-      .d_i({st_valid, st_trans_id, st_result, st_ex}),
-      .d_o({store_valid_o, store_trans_id_o, store_result_o, store_exception_o})
+      .d_i({st_valid, st_trans_id, st_result, st_ex, st_shadow_valid}),
+      .d_o({store_valid_o, store_trans_id_o, store_result_o, store_exception_o, shru_store_valid_o})
   );
 
   // determine whether this is a load or store
@@ -523,9 +540,9 @@ module load_store_unit
   // and we can always generate the byte enable from the address at hand
 
   if (CVA6Cfg.IS_XLEN64) begin : gen_8b_be
-    assign be_i = be_gen(vaddr_i[2:0], extract_transfer_size(fu_data_i.operation));
+    assign be_i = be_gen(vaddr_i[2:0], extract_transfer_size(fu_data_sel.operation));
   end else begin : gen_4b_be
-    assign be_i = be_gen_32(vaddr_i[1:0], extract_transfer_size(fu_data_i.operation));
+    assign be_i = be_gen_32(vaddr_i[1:0], extract_transfer_size(fu_data_sel.operation));
   end
 
   // ------------------------
@@ -674,18 +691,18 @@ module load_store_unit
   lsu_ctrl_t lsu_req_i;
 
   assign lsu_req_i = {
-    lsu_valid_i,
+    lsu_bypass_req,
     vaddr_i,
     tinst_i,
     hs_ld_st_inst,
     hlvx_inst,
     overflow,
     g_overflow,
-    fu_data_i.operand_b,
+    fu_data_sel.operand_b,
     be_i,
-    fu_data_i.fu,
-    fu_data_i.operation,
-    fu_data_i.trans_id
+    fu_data_sel.fu,
+    fu_data_sel.operation,
+    fu_data_sel.trans_id
   };
 
   lsu_bypass #(
@@ -693,7 +710,7 @@ module load_store_unit
       .lsu_ctrl_t(lsu_ctrl_t)
   ) lsu_bypass_i (
       .lsu_req_i      (lsu_req_i),
-      .lsu_req_valid_i(lsu_valid_i),
+      .lsu_req_valid_i(lsu_bypass_req),
       .pop_ld_i       (pop_ld),
       .pop_st_i       (pop_st),
 

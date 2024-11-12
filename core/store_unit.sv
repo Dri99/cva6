@@ -46,6 +46,8 @@ module store_unit
     output logic commit_ready_o,
     // TO_BE_COMPLETED - TO_BE_COMPLETED
     input logic amo_valid_commit_i,
+    // Shadow Store is sure to be executed - ISSUE STAGE
+    output logic commit_ready_shadow_st_o,
     // Store result is valid - ISSUE_STAGE
     output logic valid_o,
     // Transaction ID - ISSUE_STAGE
@@ -128,6 +130,7 @@ module store_unit
   logic st_ready;
   logic st_valid;
   logic st_valid_without_flush;
+  logic committed_store_q, committed_store_d;
   logic instr_is_amo;
   assign instr_is_amo = is_amo(lsu_ctrl_i.operation);
   // keep the data and the byte enable for the second cycle (after address translation)
@@ -144,6 +147,7 @@ module store_unit
   assign hlvx_inst_o     = CVA6Cfg.RVH ? lsu_ctrl_i.hlvx_inst : 1'b0;
   assign tinst_o         = CVA6Cfg.RVH ? lsu_ctrl_i.tinst : '0;  // transformed instruction
   assign trans_id_o      = trans_id_q;  // transaction id from previous cycle
+  assign commit_ready_shadow_st_o = pop_st_o && (lsu_ctrl_i.operation == SHSR)? 1'b1 : 1'b0;
 
   always_comb begin : store_control
     translation_req_o      = 1'b0;
@@ -283,6 +287,7 @@ module store_unit
   assign amo_buffer_valid = st_valid & (CVA6Cfg.RVA && (amo_op_q != AMO_NONE));
 
   assign st_ready = store_buffer_ready & amo_buffer_ready;
+  assign committed_store_d = lsu_ctrl_i.operation == SHSR ? 1'b1 : 1'b0;
 
   // ---------------
   // Store Queue
@@ -315,6 +320,7 @@ module store_unit
       .data_i               (st_data_q),
       .be_i                 (st_be_q),
       .data_size_i          (st_data_size_q),
+      .commit_unneeded_i    (committed_store_q),
       .req_port_i           (req_port_i),
       .req_port_o           (req_port_o)
   );
@@ -353,6 +359,7 @@ module store_unit
       st_data_size_q <= '0;
       trans_id_q     <= '0;
       amo_op_q       <= AMO_NONE;
+      committed_store_q<='0;
     end else begin
       state_q        <= state_d;
       st_be_q        <= st_be_n;
@@ -360,6 +367,7 @@ module store_unit
       trans_id_q     <= trans_id_n;
       st_data_size_q <= st_data_size_n;
       amo_op_q       <= amo_op_d;
+      committed_store_q<=committed_store_d;
     end
   end
 

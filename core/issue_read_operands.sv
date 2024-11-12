@@ -38,6 +38,8 @@ module issue_read_operands
     input logic flush_i,
     // Stall inserted by Acc dispatcher - ACC_DISPATCHER
     input logic stall_i,
+    // Exception committed - COMMIT_STAGE
+    input logic ex_valid_i,
     // TO_BE_COMPLETED - TO_BE_COMPLETED
     input scoreboard_entry_t [CVA6Cfg.NrIssuePorts-1:0] issue_instr_i,
     // TO_BE_COMPLETED - TO_BE_COMPLETED
@@ -72,6 +74,15 @@ module issue_read_operands
     input logic lsu_ready_i,
     // Load Store Unit result is valid - TO_BE_COMPLETED
     output logic [CVA6Cfg.NrIssuePorts-1:0] lsu_valid_o,
+    // CSR values to shadow - CSR Regfile
+    input logic [CVA6Cfg.XLEN-1:0] shadow_mepc_i,
+    input logic [CVA6Cfg.XLEN-1:0] shadow_mcause_i,
+    // FU data from SHReg Unit is valid - EX STAGE 
+    output logic shru_valid_o,
+    // FU data for storing shadow regs - EX STAGE
+    output fu_data_t shru_fu_data_o,
+    // Store of shadow register is valid - EX STAGE
+    input logic shru_store_valid_i,
     // Mult result is valid - TO_BE_COMPLETED
     output logic [CVA6Cfg.NrIssuePorts-1:0] mult_valid_o,
     // FPU is ready - TO_BE_COMPLETED
@@ -977,7 +988,30 @@ module issue_read_operands
     assign wdata_pack[i] = wdata_i[i];
     assign we_pack[i]    = we_gpr_i[i];
   end
-  if (CVA6Cfg.FpgaEn) begin : gen_fpga_regfile
+  if (CVA6Cfg.ShadowEn) begin : gen_extended_reg_file
+    extended_regfile #(
+        .CVA6Cfg      (CVA6Cfg),
+        .fu_data_t    (fu_data_t),
+        .DATA_WIDTH   (CVA6Cfg.XLEN),
+        .NR_READ_PORTS(CVA6Cfg.NrRgprPorts),
+        .ZERO_REG_ZERO(1)
+    ) i_extended_regfile (
+        .test_en_i(1'b0),
+        .raddr_i        (raddr_pack),
+        .rdata_o        (rdata),
+        .waddr_i        (waddr_pack),
+        .wdata_i        (wdata_pack),
+        .we_i           (we_pack),
+        .ex_valid_i,
+        .shadow_mepc_i,
+        .shadow_mcause_i,
+        .shru_valid_o,
+        .shru_fu_data_o,
+        .shru_store_valid_i,
+        .lsu_ready_i,
+        .*
+    );
+  end else if (CVA6Cfg.FpgaEn) begin : gen_fpga_regfile
     ariane_regfile_fpga #(
         .CVA6Cfg      (CVA6Cfg),
         .DATA_WIDTH   (CVA6Cfg.XLEN),
@@ -993,6 +1027,8 @@ module issue_read_operands
         .*
     );
   end else begin : gen_asic_regfile
+    automatic logic _shadow_rdata_o;
+    automatic logic _shadow_sp_o;
     ariane_regfile #(
         .CVA6Cfg      (CVA6Cfg),
         .DATA_WIDTH   (CVA6Cfg.XLEN),
@@ -1005,6 +1041,13 @@ module issue_read_operands
         .waddr_i  (waddr_pack),
         .wdata_i  (wdata_pack),
         .we_i     (we_pack),
+        .shadow_csr_save_i  ('b0),
+        .shadow_mepc_i      ('b0),
+        .shadow_mcause_i    ('b0),
+        .shadow_save_i      ('b0),
+        .shadow_raddr_i     ('b0),
+        .shadow_rdata_o     (_shadow_rdata_o),
+        .shadow_sp_o        (_shadow_sp_o),
         .*
     );
   end
@@ -1053,6 +1096,8 @@ module issue_read_operands
             .*
         );
       end else begin : gen_asic_fp_regfile
+        automatic logic _shadow_rdata_o;
+        automatic logic _shadow_sp_o;
         ariane_regfile #(
             .CVA6Cfg      (CVA6Cfg),
             .DATA_WIDTH   (CVA6Cfg.FLen),
@@ -1065,6 +1110,13 @@ module issue_read_operands
             .waddr_i  (waddr_pack),
             .wdata_i  (fp_wdata_pack),
             .we_i     (we_fpr_i),
+            .shadow_csr_save_i  ('b0),
+            .shadow_mepc_i      ('b0),
+            .shadow_mcause_i    ('b0),
+            .shadow_save_i      ('b0),
+            .shadow_raddr_i     ('b0),
+            .shadow_rdata_o     (_shadow_rdata_o),
+            .shadow_sp_o        (_shadow_sp_o),
             .*
         );
       end

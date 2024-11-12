@@ -175,6 +175,9 @@ module csr_regfile
     output riscv::pmpcfg_t [CVA6Cfg.NrPMPEntries-1:0] pmpcfg_o,
     // PMP addresses - ACC_DISPATCHER
     output logic [CVA6Cfg.NrPMPEntries-1:0][CVA6Cfg.PLEN-3:0] pmpaddr_o,
+    // CSR values to shadow - CSR Regfile
+    output logic [CVA6Cfg.XLEN-1:0] shadow_mepc_o,
+    output logic [CVA6Cfg.XLEN-1:0] shadow_mcause_o,
     // TO_BE_COMPLETED - PERF_COUNTERS
     output logic [31:0] mcountinhibit_o,
     // RVFI
@@ -317,6 +320,8 @@ module csr_regfile
   assign fs_o = mstatus_q.fs;
   assign vfs_o = (CVA6Cfg.RVH) ? vsstatus_q.fs : riscv::Off;
   assign vs_o = mstatus_q.vs;
+  assign shadow_mepc_o   = mepc_q;
+  assign shadow_mcause_o = mcause_q;
   // ----------------
   // CSR Read logic
   // ----------------
