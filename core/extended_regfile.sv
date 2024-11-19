@@ -19,11 +19,13 @@
 module extended_regfile 
   import ariane_pkg::*;
 #(
-    parameter config_pkg::cva6_cfg_t CVA6Cfg       = config_pkg::cva6_cfg_empty,
-    parameter type                   fu_data_t     = logic,
-    parameter int unsigned           DATA_WIDTH    = 32,
-    parameter int unsigned           NR_READ_PORTS = 2,
-    parameter bit                    ZERO_REG_ZERO = 0
+    parameter config_pkg::cva6_cfg_t CVA6Cfg        = config_pkg::cva6_cfg_empty,
+    parameter type                   fu_data_t      = logic,
+    parameter type                   dcache_req_i_t = logic,
+    parameter type                   dcache_req_o_t = logic,
+    parameter int unsigned           DATA_WIDTH     = 32,
+    parameter int unsigned           NR_READ_PORTS  = 2,
+    parameter bit                    ZERO_REG_ZERO  = 0
 ) (
     // clock and reset
     input  logic                                             clk_i,
@@ -48,8 +50,18 @@ module extended_regfile
     output fu_data_t shru_fu_data_o,
     // Store of shadow register is valid - EX STAGE
     input  logic     shru_store_valid_i,
+    // Shadow register unit can handle another exception - ISSUE
+    output logic shru_store_ready_o,
     // LSU can accept a new instruction
-    input  logic     lsu_ready_i
+    input  logic     lsu_ready_i,
+    // Page offset Load unit wants to load - EX STAGE
+    input logic [11:0] page_offset_i,
+    // Page offset is being saved in ShRU - EX STAGE
+    output logic page_offset_matches_shru_o,
+    // Data cache request ouput - CACHE
+    input  dcache_req_o_t dcache_req_i,
+    // Data cache request input - CACHE
+    output dcache_req_i_t dcache_req_o
 );
   localparam int unsigned ADDR_WIDTH = 5;
   logic [ADDR_WIDTH-1:0] shadow_raddr_sh_ctrl_rf;
@@ -80,25 +92,30 @@ module extended_regfile
       .*
   );
 
-  logic _shadow_ready_o;
   automatic logic _shadow_save_level_o;
   shadow_register_controller #(
       .CVA6Cfg          (CVA6Cfg),
       .fu_data_t        (fu_data_t),
+      .dcache_req_i_t   (dcache_req_i_t),
+      .dcache_req_o_t   (dcache_req_o_t),
       .ADDR_WIDTH       (ADDR_WIDTH),
       .DATA_WIDTH       (CVA6Cfg.XLEN),
       .NUM_SHADOW_SAVES (16)
   ) i_shadow_register_controller (
-      .shadow_irq_i        (ex_valid_i),      
-      .shadow_ready_o      (_shadow_ready_o),        
-      .shadow_save_level_o (_shadow_save_level_o),             
-      .shadow_reg_raddr_o  (shadow_raddr_sh_ctrl_rf),            
-      .shadow_reg_rdata_i  (shadow_rdata_rf_sh_ctrl),            
-      .shadow_reg_sp_i     (shadow_sp_rf_sh_ctrl),         
-      .shru_valid_o,      
-      .shru_fu_data_o,        
-      .shru_store_valid_i,            
-      .lsu_ready_i,     
+      .shadow_irq_i        (ex_valid_i),
+      .shadow_ready_o      (shru_store_ready_o),
+      .shadow_save_level_o (_shadow_save_level_o),
+      .shadow_reg_raddr_o  (shadow_raddr_sh_ctrl_rf),
+      .shadow_reg_rdata_i  (shadow_rdata_rf_sh_ctrl),
+      .shadow_reg_sp_i     (shadow_sp_rf_sh_ctrl),
+      .shru_valid_o,
+      .shru_fu_data_o,
+      .shru_store_valid_i,
+      .lsu_ready_i,
+      .page_offset_i,
+      .page_offset_matches_shru_o,
+      .dcache_req_i,
+      .dcache_req_o,
       .*
   );
 

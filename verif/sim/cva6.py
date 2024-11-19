@@ -478,7 +478,7 @@ def run_assembly(asm_test, iss_yaml, isa, target, mabi, gcc_opts, iss_opts, outp
     else: ratio = 1
     if tandem_sim:
       generate_yaml_report(yaml, target, isa, test_log_name, testlist, iss, True)
-    run_cmd(cmd, iss_timeout//ratio, debug_cmd = debug_cmd)
+    run_cmd(cmd, iss_timeout//ratio, debug_cmd = debug_cmd, exit_on_error=0)
     logging.info("[%0s] Running ISS simulation: %s ...done" % (iss, elf))
     if tandem_sim:
       tandem_postprocess(yaml, target, isa, test_log_name, log, testlist, iss)

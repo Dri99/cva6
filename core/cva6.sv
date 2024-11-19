@@ -444,6 +444,9 @@ module cva6
   logic     shru_valid_id_ex;
   fu_data_t shru_fu_data_id_ex;
   logic     shru_store_valid_ex_id;
+  logic [11:0] page_offset_ex_issue;
+  logic        page_offset_matches_shru_issue_ex;
+  logic        shadow_store_ready;
 
   logic [CVA6Cfg.XLEN-1:0] store_result_ex_id;
   logic [CVA6Cfg.TRANS_ID_BITS-1:0] store_trans_id_ex_id;
@@ -631,6 +634,8 @@ module cva6
   dcache_req_o_t [2:0] dcache_req_ports_cache_ex;
   dcache_req_i_t [1:0] dcache_req_ports_acc_cache;
   dcache_req_o_t [1:0] dcache_req_ports_cache_acc;
+  dcache_req_i_t dcache_req_ports_issue_cache;
+  dcache_req_o_t dcache_req_ports_cache_issue;
   logic dcache_commit_wbuffer_empty;
   logic dcache_commit_wbuffer_not_ni;
 
@@ -799,6 +804,8 @@ module cva6
   issue_stage #(
       .CVA6Cfg(CVA6Cfg),
       .bp_resolve_t(bp_resolve_t),
+      .dcache_req_i_t(dcache_req_i_t),
+      .dcache_req_o_t(dcache_req_o_t),
       .branchpredict_sbe_t(branchpredict_sbe_t),
       .exception_t(exception_t),
       .fu_data_t(fu_data_t),
@@ -846,6 +853,11 @@ module cva6
       .shru_valid_o            (shru_valid_id_ex),
       .shru_fu_data_o          (shru_fu_data_id_ex),
       .shru_store_valid_i      (shru_store_valid_ex_id),
+      .shru_store_ready_o      (shadow_store_ready),
+      .page_offset_i             (page_offset_ex_issue),
+      .page_offset_matches_shru_o(page_offset_matches_shru_issue_ex),
+      .dcache_req_i              (dcache_req_ports_cache_issue),
+      .dcache_req_o              (dcache_req_ports_issue_cache),
       // Multiplier
       .mult_valid_o            (mult_valid_id_ex),
       // FPU
@@ -970,6 +982,8 @@ module cva6
       .shru_valid_i            (shru_valid_id_ex),
       .shru_fu_data_i          (shru_fu_data_id_ex),
       .shru_store_valid_o      (shru_store_valid_ex_id),
+      .page_offset_o             (page_offset_ex_issue),
+      .page_offset_matches_shru_i(page_offset_matches_shru_issue_ex),
       // FPU
       .fpu_ready_o             (fpu_ready_ex_id),
       .fpu_valid_i             (fpu_valid_id_ex),
@@ -1089,6 +1103,7 @@ module cva6
       .hfence_vvma_o     (hfence_vvma_commit_controller),
       .hfence_gvma_o     (hfence_gvma_commit_controller),
       .flush_commit_o    (flush_commit),
+      .shadow_ready_i    (shadow_store_ready),
       .*
   );
 
@@ -1306,8 +1321,20 @@ module cva6
   assign dcache_req_to_cache[0] = dcache_req_ports_ex_cache[0];
   assign dcache_req_to_cache[1] = dcache_req_ports_ex_cache[1];
   assign dcache_req_to_cache[2] = dcache_req_ports_acc_cache[0];
-  assign dcache_req_to_cache[3] = dcache_req_ports_ex_cache[2].data_req ? dcache_req_ports_ex_cache [2] :
-                                                                          dcache_req_ports_acc_cache[1];
+ 
+  always_comb begin: gen_dcache_req_store_data_req
+  // Priority selection:
+  // 0 - dcache_req_ports_ex_cache [2]
+  // 1 - dcache_req_ports_acc_cache[1]
+  // 2 - dcache_req_ports_issue_cache
+    dcache_req_to_cache[3] = dcache_req_ports_issue_cache;
+    if(dcache_req_ports_acc_cache[1].data_req)  
+      dcache_req_to_cache[3] = dcache_req_ports_acc_cache[1];
+    if(dcache_req_ports_ex_cache [2].data_req)
+      dcache_req_to_cache[3] = dcache_req_ports_ex_cache[2];
+  end
+  //assign dcache_req_to_cache[3] = dcache_req_ports_ex_cache[2].data_req ? dcache_req_ports_ex_cache [2] :
+  //                                                                        dcache_req_ports_acc_cache[1];
 
   // D$ response
   assign dcache_req_ports_cache_ex[0] = dcache_req_from_cache[0];
@@ -1320,6 +1347,10 @@ module cva6
     // Set gnt signal
     dcache_req_ports_cache_ex[2].data_gnt &= dcache_req_ports_ex_cache[2].data_req;
     dcache_req_ports_cache_acc[1].data_gnt &= !dcache_req_ports_ex_cache[2].data_req;
+
+    dcache_req_ports_cache_issue  = dcache_req_from_cache[3];
+
+    dcache_req_ports_cache_issue.data_gnt  &= (!dcache_req_ports_ex_cache[2].data_req) & (!dcache_req_ports_acc_cache[1].data_req);
   end
 
   if (CVA6Cfg.DCacheType == config_pkg::WT) begin : gen_cache_wt

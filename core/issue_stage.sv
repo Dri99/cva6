@@ -20,6 +20,8 @@ module issue_stage
     parameter config_pkg::cva6_cfg_t CVA6Cfg = config_pkg::cva6_cfg_empty,
     parameter type bp_resolve_t = logic,
     parameter type branchpredict_sbe_t = logic,
+    parameter type dcache_req_i_t = logic,
+    parameter type dcache_req_o_t = logic,
     parameter type exception_t = logic,
     parameter type fu_data_t = logic,
     parameter type scoreboard_entry_t = logic,
@@ -84,6 +86,16 @@ module issue_stage
     output fu_data_t shru_fu_data_o,
     // Store of shadow register is valid - EX STAGE
     input logic shru_store_valid_i,
+    // Shadow register unit can handle another exception - ISSUE
+    output logic shru_store_ready_o,
+    // Page offset Load unit wants to load - EX STAGE
+    input logic [11:0] page_offset_i,
+    // Page offset is being saved in ShRU - EX STAGE
+    output logic page_offset_matches_shru_o,
+    // Data cache request ouput - CACHE
+    input  dcache_req_o_t dcache_req_i,
+    // Data cache request input - CACHE
+    output dcache_req_i_t dcache_req_o,
     // Branch unit is valid - EX_STAGE
     output logic [CVA6Cfg.NrIssuePorts-1:0] branch_valid_o,
     // Information of branch prediction - EX_STAGE
@@ -232,6 +244,8 @@ module issue_stage
   issue_read_operands #(
       .CVA6Cfg(CVA6Cfg),
       .branchpredict_sbe_t(branchpredict_sbe_t),
+      .dcache_req_i_t(dcache_req_i_t),
+      .dcache_req_o_t(dcache_req_o_t),
       .fu_data_t(fu_data_t),
       .scoreboard_entry_t(scoreboard_entry_t),
       .rs3_len_t(rs3_len_t),
@@ -263,6 +277,11 @@ module issue_stage
       .shru_valid_o,
       .shru_fu_data_o,
       .shru_store_valid_i,
+      .shru_store_ready_o,
+      .page_offset_i,
+      .page_offset_matches_shru_o,
+      .dcache_req_i,
+      .dcache_req_o,
       .x_issue_ready_i         (x_issue_ready_i),
       .x_issue_resp_i          (x_issue_resp_i),
       .x_issue_valid_o         (x_issue_valid_o),

@@ -105,6 +105,10 @@ module ex_stage
     input fu_data_t shru_fu_data_i,
     // Store of shadow register is valid - ISSUE STAGE
     output logic shru_store_valid_o,
+    // Page offset Load unit wants to load - ISSUE STAGE
+    output logic [11:0] page_offset_o,
+    // Page offset is being saved in ShRU - ISSUE STAGE
+    input logic page_offset_matches_shru_i,
     // LSU commit - COMMIT_STAGE
     input logic lsu_commit_i,
     // Commit queue ready to accept another commit request - COMMIT_STAGE
@@ -553,6 +557,8 @@ module ex_stage
       .shru_valid_i,
       .shru_fu_data_i,
       .shru_store_valid_o,
+      .page_offset_o,
+      .page_offset_matches_shru_i,
       .commit_i              (lsu_commit_i),
       .commit_ready_o        (lsu_commit_ready_o),
       .commit_tran_id_i,

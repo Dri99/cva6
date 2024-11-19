@@ -72,6 +72,10 @@ module load_store_unit
     input fu_data_t shru_fu_data_i,
     // Store of shadow register is valid - ISSUE STAGE
     output logic shru_store_valid_o,
+    // Page offset Load unit wants to load - ISSUE STAGE
+    output logic [11:0] page_offset_o,
+    // Page offset is being saved in ShRU - ISSUE STAGE
+    input logic page_offset_matches_shru_i,
 
     // Commit the first pending store - TO_BE_COMPLETED
     input logic commit_i,
@@ -238,6 +242,7 @@ module load_store_unit
 
   logic       [                     11:0] page_offset;
   logic                                   page_offset_matches;
+  logic                                   page_offset_matches_st;
 
   exception_t                             misaligned_exception;
   exception_t                             ld_ex;
@@ -251,6 +256,10 @@ module load_store_unit
   logic [CVA6Cfg.PPNW-1:0] satp_ppn[2:0];
   logic [CVA6Cfg.ASID_WIDTH-1:0] asid[2:0], asid_to_be_flushed[1:0];
   logic [CVA6Cfg.VLEN-1:0] vaddr_to_be_flushed[1:0];
+
+  assign page_offset_o       = page_offset;
+  assign page_offset_matches = page_offset_matches_st | page_offset_matches_shru_i;
+  
   // -------------------
   // MMU e.g.: TLBs/PTW
   // -------------------
@@ -389,7 +398,7 @@ module load_store_unit
       .dtlb_hit_i           (dtlb_hit),
       // Load Unit
       .page_offset_i        (page_offset),
-      .page_offset_matches_o(page_offset_matches),
+      .page_offset_matches_o(page_offset_matches_st),
       // AMOs
       .amo_req_o,
       .amo_resp_i,

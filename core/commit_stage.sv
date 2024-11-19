@@ -82,6 +82,8 @@ module commit_stage
     output logic fence_o,
     // Request a pipeline flush - CONTROLLER
     output logic flush_commit_o,
+    // Shadow register unit can handle another exception - ISSUE
+    input logic shadow_ready_i,
     // Flush TLBs and pipeline - CONTROLLER
     output logic sfence_vma_o,
     output logic hfence_vvma_o,
@@ -401,6 +403,10 @@ module commit_stage
     // Don't take any exceptions iff:
     // - If we halted the processor
     if (halt_i) begin
+      exception_o.valid = 1'b0;
+    end
+    // Don't take any exception if Shadow Register saving is not ready
+    if(!shadow_ready_i) begin
       exception_o.valid = 1'b0;
     end
   end

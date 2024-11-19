@@ -19,6 +19,8 @@ module issue_read_operands
 #(
     parameter config_pkg::cva6_cfg_t CVA6Cfg = config_pkg::cva6_cfg_empty,
     parameter type branchpredict_sbe_t = logic,
+    parameter type dcache_req_i_t = logic,
+    parameter type dcache_req_o_t = logic,
     parameter type fu_data_t = logic,
     parameter type scoreboard_entry_t = logic,
     parameter type forwarding_t = logic,
@@ -83,6 +85,16 @@ module issue_read_operands
     output fu_data_t shru_fu_data_o,
     // Store of shadow register is valid - EX STAGE
     input logic shru_store_valid_i,
+    // Shadow register unit can handle another exception - ISSUE
+    output logic shru_store_ready_o,
+    // Page offset Load unit wants to load - EX STAGE
+    input logic [11:0] page_offset_i,
+    // Page offset is being saved in ShRU - EX STAGE
+    output logic page_offset_matches_shru_o,
+    // Data cache request ouput - CACHE
+    input  dcache_req_o_t dcache_req_i,
+    // Data cache request input - CACHE
+    output dcache_req_i_t dcache_req_o,
     // Mult result is valid - TO_BE_COMPLETED
     output logic [CVA6Cfg.NrIssuePorts-1:0] mult_valid_o,
     // FPU is ready - TO_BE_COMPLETED
@@ -992,6 +1004,8 @@ module issue_read_operands
     extended_regfile #(
         .CVA6Cfg      (CVA6Cfg),
         .fu_data_t    (fu_data_t),
+        .dcache_req_i_t(dcache_req_i_t),
+        .dcache_req_o_t(dcache_req_o_t),
         .DATA_WIDTH   (CVA6Cfg.XLEN),
         .NR_READ_PORTS(CVA6Cfg.NrRgprPorts),
         .ZERO_REG_ZERO(1)
@@ -1009,6 +1023,11 @@ module issue_read_operands
         .shru_fu_data_o,
         .shru_store_valid_i,
         .lsu_ready_i,
+        .shru_store_ready_o,
+        .page_offset_i,
+        .page_offset_matches_shru_o,
+        .dcache_req_i,
+        .dcache_req_o,
         .*
     );
   end else if (CVA6Cfg.FpgaEn) begin : gen_fpga_regfile
