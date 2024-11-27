@@ -107,26 +107,26 @@ module ariane_regfile #(
       mem_shadow <= '0;
     end else begin
       if (shadow_save_i) begin
-          mem_shadow[0] <= mem[1];
-          mem_shadow[1] <= mem[5];
-          mem_shadow[2] <= mem[6];
-          mem_shadow[3] <= mem[7];
-          mem_shadow[4] <= mem[10];
-          mem_shadow[5] <= mem[11];
-          mem_shadow[6] <= mem[12];
-          mem_shadow[7] <= mem[13];
-          mem_shadow[8] <= mem[14];
-          mem_shadow[9] <= mem[15];
-          mem_shadow[10] <= mem[16];
-          mem_shadow[11] <= mem[17];
-          mem_shadow[12] <= mem[28];
-          mem_shadow[13] <= mem[29];
-          mem_shadow[14] <= mem[30];
-          mem_shadow[15] <= mem[31];
+          mem_shadow[0] <= mem[1];   //ra
+          mem_shadow[1] <= mem[5];   //t0
+          mem_shadow[2] <= mem[6];   //t1
+          mem_shadow[3] <= mem[7];   //t2
+          mem_shadow[4] <= mem[10];  //t3
+          mem_shadow[5] <= mem[11];  //t4
+          mem_shadow[6] <= mem[12];  //t5
+          mem_shadow[7] <= mem[13];  //t6
+          mem_shadow[8] <= mem[14];  //a0
+          mem_shadow[9] <= mem[15];  //a1
+          mem_shadow[10] <= mem[16]; //a2
+          mem_shadow[11] <= mem[17]; //a3
+          mem_shadow[12] <= mem[28]; //a4
+          mem_shadow[13] <= mem[29]; //a5
+          mem_shadow[14] <= mem[30]; //a6
+          mem_shadow[15] <= mem[31]; //a7
       end 
     end
   end
-  
+
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (~rst_ni) begin
       shadow_mepc   <= '0;

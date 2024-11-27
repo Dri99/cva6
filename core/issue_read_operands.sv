@@ -1031,6 +1031,10 @@ module issue_read_operands
         .*
     );
   end else if (CVA6Cfg.FpgaEn) begin : gen_fpga_regfile
+    shru_valid_o = '0;
+    page_offset_matches_shru_o = '0;
+    shru_store_ready_o = '1;
+    dcache_req_o.data_req = '0;
     ariane_regfile_fpga #(
         .CVA6Cfg      (CVA6Cfg),
         .DATA_WIDTH   (CVA6Cfg.XLEN),
