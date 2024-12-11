@@ -410,4 +410,13 @@ module commit_stage
       exception_o.valid = 1'b0;
     end
   end
+
+`ifndef SYNTHESIS
+  export "DPI-C" function get_pc;
+  function longint get_pc();
+    // Call C function
+    return pc_o;
+  endfunction
+`endif
+
 endmodule

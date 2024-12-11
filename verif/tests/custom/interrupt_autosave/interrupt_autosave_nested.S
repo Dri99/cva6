@@ -64,6 +64,7 @@ first_ecall:
   ecall
 second_ecall:
   ecall
+  j pass
 #enable global interrupt
   li t0, 0x8
   csrw mstatus, t0
@@ -106,18 +107,19 @@ exception_handler:
     csrr t6, mepc
   */
   csrr  t0, mepc
-  la t1, first_ecall
-  beq t0, t1, 0f
-  la t1, second_ecall
-  beq t0,t1, 1f
-default:
-  la t0, fail
-  j return_from_exc
-1:
-  la t0, pass
-  j return_from_exc
-0:
-  la t0, second_ecall
-return_from_exc:
+  addi t0, t0, 4
+#  la t1, first_ecall
+#  beq t0, t1, 0f
+#  la t1, second_ecall
+#  beq t0,t1, 1f
+#default:
+#  la t0, fail
+#  j return_from_exc
+#1:
+#  la t0, pass
+#  j return_from_exc
+#0:
+#  la t0, second_ecall
+#return_from_exc:
   csrw  mepc, t0
   mret

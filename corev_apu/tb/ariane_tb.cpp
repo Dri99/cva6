@@ -44,6 +44,10 @@
 #include <fesvr/elfloader.h>
 #include "remote_bitbang.h"
 
+#include "riscv/debug_defines.h"
+
+#include "svdpi.h"
+
 // This software is heavily based on Rocket Chip
 // Checkout this awesome project:
 // https://github.com/freechipsproject/rocket-chip/
@@ -62,10 +66,13 @@ void handle_sigterm(int sig) {
   dtm->stop();
 }
 
+unsigned long long tohost_addr, fromhost_addr;
 
 extern "C" void read_elf(const char* filename);
 extern "C" char get_section (long long* address, long long* len);
 extern "C" void read_section_void(long long address, void * buffer, uint64_t size = 0);
+extern "C" char read_symbol(const char* symbol_name, unsigned long long* address);
+extern "C" void signal_syscall();
 
 // Called by $time in Verilog converts to double, to match what SystemC does
 double sc_time_stamp () {
@@ -286,6 +293,14 @@ done_processing:
 
   read_elf(htif_argv[1]);
 
+  const svScope scope = svGetScopeFromName("TOP.ariane_testharness.i_ariane.i_cva6.commit_stage_i");
+  assert(scope);  // Check for nullptr if scope not found
+  svSetScope(scope);
+  read_symbol("tohost",&tohost_addr);
+  read_symbol("fromhost",&fromhost_addr);
+  std::cout<<"Found on elf tohost: 0x" << std::hex <<tohost_addr <<std::endl
+          << "Found on elf fromhost: 0x" << std::hex  << fromhost_addr <<std::endl;
+
 #if VM_TRACE
   Verilated::traceEverOn(true); // Verilator must compute traced signals
 #if VM_TRACE_FST
@@ -341,7 +356,7 @@ done_processing:
 #endif
   long long addr;
   long long len;
-
+  bool do_trace = true;
   size_t mem_size = 0xFFFFFF;
   while(get_section(&addr, &len))
   {
@@ -354,19 +369,19 @@ done_processing:
           std::cerr << "No user memory instanciated ...\n";
         }
   }
-
+  bool halt_reached = false;
   while (!dtm->done() && !jtag->done() && !(top->exit_o & 0x1)) {
     top->clk_i = 0;
     top->eval();
 #if VM_TRACE
-    if (vcdfile || fst_fname)
+    if (do_trace && (vcdfile || fst_fname))
       tfp->dump(static_cast<vluint64_t>(main_time * 2));
 #endif
 
     top->clk_i = 1;
     top->eval();
 #if VM_TRACE
-    if (vcdfile || fst_fname)
+    if (do_trace && (vcdfile || fst_fname))
       tfp->dump(static_cast<vluint64_t>(main_time * 2 + 1));
 #endif
     // toggle RTC
@@ -374,6 +389,17 @@ done_processing:
       top->rtc_i ^= 1;
     }
     main_time++;
+    long long pc = get_pc();
+    if(!do_trace && (pc >= 0x80000220 && pc <= 0x80000290)){
+      do_trace = true;
+      std::cout<<"Pc in good place after "<< main_time<<"clocks, let's start dumping\n";
+    }
+#define halted_q top->rootp->ariane_testharness__DOT__i_dm_top__DOT__i_dm_mem__DOT__halted_q
+#define resume_q top->rootp->ariane_testharness__DOT__i_dm_top__DOT__i_dm_mem__DOT__
+    if(!halt_reached && halted_q!=0){
+      halt_reached = true;
+      std::cout<<"A Hart is halted, can resume now" <<std::endl;
+    }
   }
 
 #if VM_TRACE
@@ -412,4 +438,9 @@ done_processing:
   }
 
   return ret;
+}
+
+extern "C" void signal_syscall(){
+  std::cout << "Syscall received in C" << std::endl;
+
 }
