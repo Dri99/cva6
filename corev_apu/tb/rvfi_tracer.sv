@@ -19,6 +19,7 @@ import "DPI-C" function byte get_section(output longint address, output longint 
 import "DPI-C" context function void read_section_sv(input longint address, inout byte buffer[]);
 `endif
 
+import "DPI-C" function void signal_syscall();
 
 module rvfi_tracer #(
   parameter config_pkg::cva6_cfg_t CVA6Cfg = config_pkg::cva6_cfg_empty,
@@ -37,11 +38,13 @@ module rvfi_tracer #(
 );
 
   longint unsigned TOHOST_ADDR;
+  longint unsigned FROMHOST_ADDR;
   string binary;
   int f;
   int unsigned SIM_FINISH;
   initial begin
     TOHOST_ADDR = '0;
+    FROMHOST_ADDR = '0;
     f = $fopen($sformatf("trace_rvfi_hart_%h.dasm", HART_ID), "w");
     if (!$value$plusargs("time_out=%d", SIM_FINISH)) SIM_FINISH = 2000000;
     if (!$value$plusargs("tohost_addr=%h", TOHOST_ADDR)) TOHOST_ADDR = '0;
@@ -56,6 +59,19 @@ module rvfi_tracer #(
         if (TOHOST_ADDR == '0) begin
             $display("*** [rvf_tracer] WARNING: No valid address of 'tohost' (tohost == 0x%h), termination possible only by timeout or Ctrl-C!\n", TOHOST_ADDR);
             $fwrite(f, "*** [rvfi_tracer] WARNING No valid address of 'tohost' (tohost == 0x%h), termination possible only by timeout or Ctrl-C!\n", TOHOST_ADDR);
+        end
+    end
+    if (FROMHOST_ADDR == '0) begin
+        if (!$value$plusargs("elf_file=%s", binary)) binary = "";
+        if (binary != "") begin
+            read_elf(binary);
+            read_symbol("fromhost", FROMHOST_ADDR);
+        end
+        $display("*** [rvf_tracer] INFO: Loading binary : %s", binary);
+        $display("*** [rvf_tracer] INFO: fromhost_addr: %h", FROMHOST_ADDR);
+        if (FROMHOST_ADDR == '0) begin
+            $display("*** [rvf_tracer] WARNING: No valid address of 'fromhost' (fromhost == 0x%h), Syscall response not available\n", FROMHOST_ADDR);
+            $fwrite(f, "*** [rvfi_tracer] WARNING No valid address of 'fromhost' (fromhost == 0x%h), Syscall response not available\n", FROMHOST_ADDR);
         end
     end
   end
@@ -110,26 +126,39 @@ module rvfi_tracer #(
           if (rvfi_i[i].mem_wmask != 0) begin
             $fwrite(f, " mem 0x%h 0x%h", rvfi_i[i].mem_addr, rvfi_i[i].mem_wdata);
             if (TOHOST_ADDR != '0 &&
-                rvfi_i[i].mem_paddr == TOHOST_ADDR &&
-                rvfi_i[i].mem_wdata[0] == 1'b1) begin
-              end_of_test_q <= rvfi_i[i].mem_wdata[31:0];
-              $display("*** [rvfi_tracer] INFO: Simulation terminated after %d cycles!\n", cycles);
+              rvfi_i[i].mem_paddr == TOHOST_ADDR &&
+              rvfi_i[i].mem_wdata == '0) begin
+                
+                if(rvfi_i[i].mem_wdata[0] == 1'b1) begin
+                  end_of_test_q <= rvfi_i[i].mem_wdata[31:0];
+                  $display("*** [rvfi_tracer] INFO: Simulation terminated after %d cycles!\n", cycles);
+                end else begin
+                  $display("*** [rvfi_tracer] INFO: Received Syscall!\n");
+                  signal_syscall();
+                end
+                
+                 
             end
           end
         end
         $fwrite(f, "\n");
       end else begin
         if (rvfi_i[i].trap) begin
-          case (rvfi_i[i].cause)
-            32'h0: cause = "INSTR_ADDR_MISALIGNED";
-            32'h1: cause = "INSTR_ACCESS_FAULT";
-            32'h2: cause = "ILLEGAL_INSTR";
-            32'h3: cause = "BREAKPOINT";
-            32'h4: cause = "LD_ADDR_MISALIGNED";
-            32'h5: cause = "LD_ACCESS_FAULT";
-            32'h6: cause = "ST_ADDR_MISALIGNED";
-            32'h7: cause = "ST_ACCESS_FAULT";
-          endcase;
+          if(rvfi_i[i].cause[CVA6Cfg.XLEN-1]) begin
+            cause = "INTERRUPT";
+          end else begin
+            case (rvfi_i[i].cause)
+              32'h0: cause = "INSTR_ADDR_MISALIGNED";
+              32'h1: cause = "INSTR_ACCESS_FAULT";
+              32'h2: cause = "ILLEGAL_INSTR";
+              32'h3: cause = "BREAKPOINT";
+              32'h4: cause = "LD_ADDR_MISALIGNED";
+              32'h5: cause = "LD_ACCESS_FAULT";
+              32'h6: cause = "ST_ADDR_MISALIGNED";
+              32'h7: cause = "ST_ACCESS_FAULT";
+              default: cause = "OTHER";
+            endcase;
+          end
           $fwrite(f, "%s exception @ 0x%h\n", cause, pc64);
         end
       end

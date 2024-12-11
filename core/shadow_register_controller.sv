@@ -21,8 +21,8 @@ import ariane_pkg::*;
 ) (
   input logic                   clk_i,
   input logic                   rst_ni,
-  // from/to core controller indicating an interrupt
-  input logic                   shadow_irq_i,
+  // Trigger save logic - ISSUE STAGE
+  output logic shadow_reg_save_i,
   // whether we are ready to process another interrupt (for nesting)
   output logic                  shadow_ready_o,
   output logic [ADDR_WIDTH-1:0] shadow_save_level_o,
@@ -97,7 +97,7 @@ import ariane_pkg::*;
     unique case (save_state_q)
       IDLE: begin
         cnt_d = SHADOW_RELOAD;
-        if (shadow_irq_i) begin
+        if (shadow_reg_save_i) begin
           save_state_d = SAVE;
           // the stack register points to the last already used address
           stack_d      = shadow_reg_sp_i - (CVA6Cfg.XLEN/8);
@@ -142,7 +142,7 @@ import ariane_pkg::*;
 `ifndef SYNTHESIS
   a_shadow_controller_acces_while_saving: assert property (
     @(posedge clk_i) disable iff (!rst_ni)
-    save_state_q == SAVE |-> !shadow_irq_i)
+    save_state_q == SAVE |-> !shadow_reg_save_i)
     else
       $error("shadow register access is out of range");
 `ifndef VERILATOR

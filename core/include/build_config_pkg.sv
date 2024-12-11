@@ -41,6 +41,7 @@ package build_config_pkg;
     cfg.ASID_WIDTH = (CVA6Cfg.XLEN == 64) ? 16 : 1;
     cfg.VMID_WIDTH = (CVA6Cfg.XLEN == 64) ? 14 : 1;
 
+    cfg.ShadowEn = CVA6Cfg.ShadowEn;
     cfg.FpgaEn = CVA6Cfg.FpgaEn;
     cfg.TechnoCut = CVA6Cfg.TechnoCut;
 

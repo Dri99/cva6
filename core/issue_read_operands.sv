@@ -40,8 +40,6 @@ module issue_read_operands
     input logic flush_i,
     // Stall inserted by Acc dispatcher - ACC_DISPATCHER
     input logic stall_i,
-    // Exception committed - COMMIT_STAGE
-    input logic ex_valid_i,
     // TO_BE_COMPLETED - TO_BE_COMPLETED
     input scoreboard_entry_t [CVA6Cfg.NrIssuePorts-1:0] issue_instr_i,
     // TO_BE_COMPLETED - TO_BE_COMPLETED
@@ -76,6 +74,9 @@ module issue_read_operands
     input logic lsu_ready_i,
     // Load Store Unit result is valid - TO_BE_COMPLETED
     output logic [CVA6Cfg.NrIssuePorts-1:0] lsu_valid_o,
+    // Trigger save logic - ISSUE STAGE
+    output logic shadow_reg_save_i,
+    output logic [CVA6Cfg.XLEN-1:0] next_sp_o,
     // CSR values to shadow - CSR Regfile
     input logic [CVA6Cfg.XLEN-1:0] shadow_mepc_i,
     input logic [CVA6Cfg.XLEN-1:0] shadow_mcause_i,
@@ -1000,6 +1001,8 @@ module issue_read_operands
     assign wdata_pack[i] = wdata_i[i];
     assign we_pack[i]    = we_gpr_i[i];
   end
+
+  generate
   if (CVA6Cfg.ShadowEn) begin : gen_extended_reg_file
     extended_regfile #(
         .CVA6Cfg      (CVA6Cfg),
@@ -1016,12 +1019,13 @@ module issue_read_operands
         .waddr_i        (waddr_pack),
         .wdata_i        (wdata_pack),
         .we_i           (we_pack),
-        .ex_valid_i,
+        .shadow_reg_save_i,
         .shadow_mepc_i,
         .shadow_mcause_i,
         .shru_valid_o,
         .shru_fu_data_o,
         .shru_store_valid_i,
+        .next_sp_o,
         .lsu_ready_i,
         .shru_store_ready_o,
         .page_offset_i,
@@ -1031,10 +1035,10 @@ module issue_read_operands
         .*
     );
   end else if (CVA6Cfg.FpgaEn) begin : gen_fpga_regfile
-    shru_valid_o = '0;
-    page_offset_matches_shru_o = '0;
-    shru_store_ready_o = '1;
-    dcache_req_o.data_req = '0;
+    assign shru_valid_o =               '0;
+    assign page_offset_matches_shru_o = '0;
+    assign shru_store_ready_o =         '1;
+    assign dcache_req_o.data_req =      '0;
     ariane_regfile_fpga #(
         .CVA6Cfg      (CVA6Cfg),
         .DATA_WIDTH   (CVA6Cfg.XLEN),
@@ -1074,6 +1078,7 @@ module issue_read_operands
         .*
     );
   end
+  endgenerate
 
   // -----------------------------
   // Floating-Point Register File

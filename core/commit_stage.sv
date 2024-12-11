@@ -406,9 +406,9 @@ module commit_stage
       exception_o.valid = 1'b0;
     end
     // Don't take any exception if Shadow Register saving is not ready
-    if(!shadow_ready_i) begin
-      exception_o.valid = 1'b0;
-    end
+    //if(!shadow_ready_i) begin
+    //  exception_o.valid = 1'b0;
+    //end
   end
 
 `ifndef SYNTHESIS

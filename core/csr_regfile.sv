@@ -175,9 +175,12 @@ module csr_regfile
     output riscv::pmpcfg_t [CVA6Cfg.NrPMPEntries-1:0] pmpcfg_o,
     // PMP addresses - ACC_DISPATCHER
     output logic [CVA6Cfg.NrPMPEntries-1:0][CVA6Cfg.PLEN-3:0] pmpaddr_o,
-    // CSR values to shadow - CSR Regfile
+    // Trigger save logic - ISSUE STAGE
+    output logic shadow_reg_save_o,
+    // CSR values to shadow - ISSUE STAGE
     output logic [CVA6Cfg.XLEN-1:0] shadow_mepc_o,
     output logic [CVA6Cfg.XLEN-1:0] shadow_mcause_o,
+    input  logic [CVA6Cfg.XLEN-1:0] sp_n_i,
     // TO_BE_COMPLETED - PERF_COUNTERS
     output logic [31:0] mcountinhibit_o,
     // RVFI
@@ -290,6 +293,7 @@ module csr_regfile
   riscv::pmpcfg_t [63:0] pmpcfg_q, pmpcfg_d, pmpcfg_next;
   logic [63:0][CVA6Cfg.PLEN-3:0] pmpaddr_q, pmpaddr_d, pmpaddr_next;
   logic [MHPMCounterNum+3-1:0] mcountinhibit_d, mcountinhibit_q;
+  logic [CVA6Cfg.XLEN-1:0] last_saved_sp_q, last_saved_sp_d;
 
   localparam logic [CVA6Cfg.XLEN-1:0] IsaCode = (CVA6Cfg.XLEN'(CVA6Cfg.RVA) <<  0)                // A - Atomic Instructions extension
   | (CVA6Cfg.XLEN'(CVA6Cfg.RVB) << 1)  // B - Bitmanip extension
@@ -320,8 +324,11 @@ module csr_regfile
   assign fs_o = mstatus_q.fs;
   assign vfs_o = (CVA6Cfg.RVH) ? vsstatus_q.fs : riscv::Off;
   assign vs_o = mstatus_q.vs;
-  assign shadow_mepc_o   = mepc_q;
-  assign shadow_mcause_o = mcause_q;
+
+  assign shadow_reg_save_o = ex_i.valid & !debug_mode_d;
+  //assign shadow_reg_save_o = ex_i.valid && (ex_i.cause != riscv::BREAKPOINT) &&  (ex_i.cause!= riscv::DEBUG_REQUEST);
+  assign shadow_mepc_o     = mepc_q;
+  assign shadow_mcause_o   = mcause_q;
   // ----------------
   // CSR Read logic
   // ----------------
@@ -780,6 +787,7 @@ module csr_regfile
           if (CVA6Cfg.XLEN == 32) csr_rdata = cyc_data_i;
           else read_access_exception = 1'b1;
         end
+        riscv::CSR_LAST_SP: csr_rdata = last_saved_sp_q;
         // PMPs
         riscv::CSR_PMPCFG0,
                 riscv::CSR_PMPCFG1,
@@ -936,6 +944,7 @@ module csr_regfile
 
     cyc_we_o                        = 1'b0;
     cyc_data_o                      = 'b0; 
+    last_saved_sp_d                 = shadow_reg_save_o ? sp_n_i : last_saved_sp_q;
 
     fcsr_d                          = fcsr_q;
 
@@ -1648,6 +1657,7 @@ module csr_regfile
           if (CVA6Cfg.XLEN == 32) cyc_data_o = csr_wdata;
           else update_access_exception = 1'b1;
         end
+        riscv::CSR_LAST_SP: last_saved_sp_q = csr_wdata;
         // PMP locked logic
         // 1. refuse to update any locked entry
         // 2. also refuse to update the entry below a locked TOR entry
@@ -2659,6 +2669,7 @@ module csr_regfile
       mcause_q         <= mcause_d;
       mcounteren_q     <= mcounteren_d;
       mscratch_q       <= mscratch_d;
+      last_saved_sp_q  <= last_saved_sp_d;
       if (CVA6Cfg.TvalEn) mtval_q <= mtval_d;
       fiom_q          <= fiom_d;
       dcache_q        <= dcache_d;

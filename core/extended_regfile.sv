@@ -30,8 +30,6 @@ module extended_regfile
     // clock and reset
     input  logic                                             clk_i,
     input  logic                                             rst_ni,
-    // pipeline currently flushed by an exception
-    input  logic                                             ex_valid_i,
     // disable clock gates for testing
     input  logic                                             test_en_i,
     // read port
@@ -41,6 +39,9 @@ module extended_regfile
     input  logic [CVA6Cfg.NrCommitPorts-1:0][           4:0] waddr_i,
     input  logic [CVA6Cfg.NrCommitPorts-1:0][DATA_WIDTH-1:0] wdata_i,
     input  logic [CVA6Cfg.NrCommitPorts-1:0]                 we_i,
+    // Trigger save logic - ISSUE STAGE
+    output logic shadow_reg_save_i,
+    output logic [DATA_WIDTH-1:0] next_sp_o,
     // CSR values to shadow - CSR Regfile
     input  logic [DATA_WIDTH-1:0] shadow_mepc_i,
     input  logic [DATA_WIDTH-1:0] shadow_mcause_i,
@@ -76,8 +77,8 @@ module extended_regfile
       .NR_READ_PORTS(CVA6Cfg.NrRgprPorts),
       .ZERO_REG_ZERO(1)
   ) i_ariane_regfile_ff (
-      .shadow_csr_save_i(ex_valid_i),
-      .shadow_save_i  (ex_valid_i),
+      .shadow_csr_save_i(shadow_reg_save_i),
+      .shadow_save_i  (shadow_reg_save_i),
       .shadow_raddr_i (shadow_raddr_sh_ctrl_rf),
       .shadow_rdata_o (shadow_rdata_rf_sh_ctrl),
       .shadow_sp_o    (shadow_sp_rf_sh_ctrl),
@@ -89,10 +90,11 @@ module extended_regfile
       .we_i,
       .shadow_mepc_i,
       .shadow_mcause_i,
+      .next_sp_o,
       .*
   );
 
-  automatic logic _shadow_save_level_o;
+  logic [ADDR_WIDTH-1:0] _shadow_save_level_o;
   shadow_register_controller #(
       .CVA6Cfg          (CVA6Cfg),
       .fu_data_t        (fu_data_t),
@@ -102,7 +104,7 @@ module extended_regfile
       .DATA_WIDTH       (CVA6Cfg.XLEN),
       .NUM_SHADOW_SAVES (16)
   ) i_shadow_register_controller (
-      .shadow_irq_i        (ex_valid_i),
+      .shadow_reg_save_i,
       .shadow_ready_o      (shru_store_ready_o),
       .shadow_save_level_o (_shadow_save_level_o),
       .shadow_reg_raddr_o  (shadow_raddr_sh_ctrl_rf),

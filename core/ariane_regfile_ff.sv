@@ -50,7 +50,8 @@ module ariane_regfile #(
     // shadow registers - read port
     input  logic [ADDR_WIDTH-1:0] shadow_raddr_i,
     output logic [DATA_WIDTH-1:0] shadow_rdata_o,
-    output logic [DATA_WIDTH-1:0] shadow_sp_o
+    output logic [DATA_WIDTH-1:0] shadow_sp_o,
+    output logic [DATA_WIDTH-1:0] next_sp_o
 );
 
   localparam NUM_WORDS = 2 ** ADDR_WIDTH;
@@ -64,7 +65,7 @@ module ariane_regfile #(
   // shadow csrs
   logic [DATA_WIDTH-1:0]             shadow_mepc;
   logic [DATA_WIDTH-1:0]             shadow_mcause;
-
+  assign next_sp_o = shadow_save_i ? (mem[2] - (NUM_WORDS_SHADOW * (CVA6Cfg.XLEN / 8))) : mem[2];
 
   always_comb begin : we_decoder
     for (int unsigned j = 0; j < CVA6Cfg.NrCommitPorts; j++) begin
@@ -86,7 +87,7 @@ module ariane_regfile #(
             // shadow register save bumps the stack pointer too
             // TODO: if a write happens to sp at the same time as a
             // shadow_save_i request, we might lose the write..
-            mem[i] <= mem[i] - NUM_WORDS_SHADOW * (CVA6Cfg.XLEN / 8);
+            mem[i] <= mem[i] - (NUM_WORDS_SHADOW * (CVA6Cfg.XLEN / 8));
           end else if (we_dec[j][i]) begin
             mem[i] <= wdata_i[j];
           end
@@ -111,18 +112,18 @@ module ariane_regfile #(
           mem_shadow[1] <= mem[5];   //t0
           mem_shadow[2] <= mem[6];   //t1
           mem_shadow[3] <= mem[7];   //t2
-          mem_shadow[4] <= mem[10];  //t3
-          mem_shadow[5] <= mem[11];  //t4
-          mem_shadow[6] <= mem[12];  //t5
-          mem_shadow[7] <= mem[13];  //t6
-          mem_shadow[8] <= mem[14];  //a0
-          mem_shadow[9] <= mem[15];  //a1
-          mem_shadow[10] <= mem[16]; //a2
-          mem_shadow[11] <= mem[17]; //a3
-          mem_shadow[12] <= mem[28]; //a4
-          mem_shadow[13] <= mem[29]; //a5
-          mem_shadow[14] <= mem[30]; //a6
-          mem_shadow[15] <= mem[31]; //a7
+          mem_shadow[4] <= mem[10];  //a0
+          mem_shadow[5] <= mem[11];  //a1
+          mem_shadow[6] <= mem[12];  //a2
+          mem_shadow[7] <= mem[13];  //a3
+          mem_shadow[8] <= mem[14];  //a4
+          mem_shadow[9] <= mem[15];  //a5
+          mem_shadow[10] <= mem[16]; //a6
+          mem_shadow[11] <= mem[17]; //a7
+          mem_shadow[12] <= mem[28]; //t3
+          mem_shadow[13] <= mem[29]; //t4
+          mem_shadow[14] <= mem[30]; //t5
+          mem_shadow[15] <= mem[31]; //t6
       end 
     end
   end

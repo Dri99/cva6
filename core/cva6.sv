@@ -439,8 +439,10 @@ module cva6
   logic load_valid_ex_id;
   exception_t load_exception_ex_id;
 
-  logic [CVA6Cfg.XLEN-1:0] shadow_mepc_csr_id;
-  logic [CVA6Cfg.XLEN-1:0] shadow_mcause_csr_id;
+  logic shadow_reg_save_csr_issue;  
+  logic [CVA6Cfg.XLEN-1:0] shadow_mepc_csr_issue;
+  logic [CVA6Cfg.XLEN-1:0] shadow_mcause_csr_issue;
+  logic [CVA6Cfg.XLEN-1:0] next_sp_issue_csr;
   logic     shru_valid_id_ex;
   fu_data_t shru_fu_data_id_ex;
   logic     shru_store_valid_ex_id;
@@ -822,7 +824,6 @@ module cva6
       .flush_unissued_instr_i  (flush_unissued_instr_ctrl_id),
       .flush_i                 (flush_ctrl_id),
       .stall_i                 (stall_acc_id),
-      .ex_valid_i              (ex_commit.valid),
       // ID Stage
       .decoded_instr_i         (issue_entry_id_issue),
       .orig_instr_i            (orig_instr_id_issue),
@@ -848,8 +849,10 @@ module cva6
       .lsu_ready_i             (lsu_ready_ex_id),
       .lsu_valid_o             (lsu_valid_id_ex),
       // Shadow Register unit
-      .shadow_mepc_i           (shadow_mepc_csr_id),
-      .shadow_mcause_i         (shadow_mcause_csr_id),
+      .shadow_reg_save_i       (shadow_reg_save_csr_issue),
+      .shadow_mepc_i           (shadow_mepc_csr_issue),
+      .shadow_mcause_i         (shadow_mcause_csr_issue),
+      .next_sp_o               (next_sp_issue_csr),
       .shru_valid_o            (shru_valid_id_ex),
       .shru_fu_data_o          (shru_fu_data_id_ex),
       .shru_store_valid_i      (shru_store_valid_ex_id),
@@ -1188,8 +1191,10 @@ module cva6
       .cyc_data_i              (data_cyc_csr),
       .pmpcfg_o                (pmpcfg),
       .pmpaddr_o               (pmpaddr),
-      .shadow_mepc_o           (shadow_mepc_csr_id),
-      .shadow_mcause_o         (shadow_mcause_csr_id),
+      .shadow_reg_save_o       (shadow_reg_save_csr_issue),
+      .shadow_mepc_o           (shadow_mepc_csr_issue),
+      .shadow_mcause_o         (shadow_mcause_csr_issue),
+      .sp_n_i                  (next_sp_issue_csr),
       .mcountinhibit_o         (mcountinhibit_csr_perf),
       //RVFI
       .rvfi_csr_o              (rvfi_csr),
@@ -1231,17 +1236,20 @@ module cva6
         .sb_full_i          (sb_full),
         // TODO this is more complex that that
         // If superscalar then we additionally have to check [1] when transaction 0 succeeded
-        .if_empty_i         (~fetch_valid_if_id[0]),
-        .ex_i               (ex_commit),
-        .eret_i             (eret),
-        .resolved_branch_i  (resolved_branch),
-        .branch_exceptions_i(flu_exception_ex_id),
-        .l1_icache_access_i (icache_dreq_if_cache),
-        .l1_dcache_access_i (dcache_req_ports_ex_cache),
-        .miss_vld_bits_i    (miss_vld_bits),
-        .i_tlb_flush_i      (flush_tlb_ctrl_ex),
-        .stall_issue_i      (stall_issue),
-        .mcountinhibit_i    (mcountinhibit_csr_perf)
+        .if_empty_i              (~fetch_valid_if_id[0]),
+        .ex_i                    (ex_commit),
+        .eret_i                  (eret),
+        .resolved_branch_i       (resolved_branch),
+        .branch_exceptions_i     (flu_exception_ex_id),
+        .l1_icache_access_i      (icache_dreq_if_cache),
+        .l1_dcache_access_i      (dcache_req_ports_ex_cache),
+        .miss_vld_bits_i         (miss_vld_bits),
+        .i_tlb_flush_i           (flush_tlb_ctrl_ex),
+        .stall_issue_i           (stall_issue),
+        .mcountinhibit_i         (mcountinhibit_csr_perf),
+        .shadow_reg_activation_i (shadow_reg_save_csr_issue),
+        .exception_i             (ex_commit.valid),
+        .debug_mode_enters_i     (set_debug_pc)
     );
   end : gen_perf_counter
   else begin : gen_no_perf_counter

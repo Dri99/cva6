@@ -57,7 +57,10 @@ module perf_counters
     input  logic [NumPorts-1:0][CVA6Cfg.DCACHE_SET_ASSOC-1:0]miss_vld_bits_i,  //For Cache eviction (3ports-LOAD,STORE,PTW)
     input logic i_tlb_flush_i,
     input logic stall_issue_i,  //stall-read operands
-    input logic [31:0] mcountinhibit_i
+    input logic [31:0] mcountinhibit_i,
+    input logic shadow_reg_activation_i,
+    input logic exception_i,
+    input logic debug_mode_enters_i
 );
 
   typedef logic [11:0] csr_addr_t;
@@ -80,6 +83,8 @@ module perf_counters
   logic [CVA6Cfg.NrCommitPorts-1:0] return_event;
   logic [CVA6Cfg.NrCommitPorts-1:0] int_event;
   logic [CVA6Cfg.NrCommitPorts-1:0] fp_event;
+  logic [CVA6Cfg.NrCommitPorts-1:0] mret_event;
+  logic [CVA6Cfg.NrCommitPorts-1:0] dret_event;
 
   //Multiplexer
   always_comb begin : Mux
@@ -91,6 +96,8 @@ module perf_counters
     return_event = '{default: 0};
     int_event = '{default: 0};
     fp_event = '{default: 0};
+    mret_event = '{default: 0};
+    dret_event = '{default: 0};
 
     for (int unsigned j = 0; j < CVA6Cfg.NrCommitPorts; j++) begin
       load_event[j] = commit_ack_i[j] & (commit_instr_i[j].fu == LOAD);
@@ -100,6 +107,8 @@ module perf_counters
       return_event[j] = commit_ack_i[j] & (commit_instr_i[j].op == JALR && commit_instr_i[j].rd == 'd0);
       int_event[j] = commit_ack_i[j] & (commit_instr_i[j].fu == ALU || commit_instr_i[j].fu == MULT);
       fp_event[j] = commit_ack_i[j] & (commit_instr_i[j].fu == FPU || commit_instr_i[j].fu == FPU_VEC);
+      mret_event[j] = commit_ack_i[j] & (commit_instr_i[j].op == MRET );
+      dret_event[j] = commit_ack_i[j] & (commit_instr_i[j].op == DRET );
     end
 
     for (int unsigned i = 1; i <= MHPMCounterNum; i++) begin
@@ -132,6 +141,12 @@ module perf_counters
         5'b10100: events[i] = |int_event;  //Integer instructions
         5'b10101: events[i] = |fp_event;  //Floating Point Instructions
         5'b10110: events[i] = stall_issue_i;  //Pipeline bubbles
+
+        5'b10111: events[i] = |mret_event; //23
+        5'b11000: events[i] = |dret_event; //24
+        5'b11001: events[i] = shadow_reg_activation_i; //25
+        5'b11010: events[i] = exception_i; //26
+        5'b11011: events[i] = debug_mode_enters_i; //27
         default: events[i] = 0;
       endcase
     end
@@ -147,7 +162,7 @@ module perf_counters
 
     // Increment the non-inhibited counters with active events
     for (int unsigned i = 1; i <= 6; i++) begin
-      if ((!debug_mode_i) && (!we_i)) begin
+      if ((!we_i)) begin
         if ((events[i]) == 1 && (!mcountinhibit_i[i+2])) begin
           generic_counter_d[i] = generic_counter_q[i] + 1'b1;
         end

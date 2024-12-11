@@ -43,8 +43,6 @@ module issue_stage
     input logic flush_i,
     // Stall inserted by Acc dispatcher - ACC_DISPATCHER
     input logic stall_i,
-    // Exception committed - COMMIT_STAGE
-    input logic ex_valid_i,
     // Handshake's data with decode stage - ID_STAGE
     input scoreboard_entry_t [CVA6Cfg.NrIssuePorts-1:0] decoded_instr_i,
     // instruction value - ID_STAGE
@@ -77,6 +75,9 @@ module issue_stage
     input logic lsu_ready_i,
     // Load store unit FU is valid - EX_STAGE
     output logic [CVA6Cfg.NrIssuePorts-1:0] lsu_valid_o,
+    // Trigger save logic - ISSUE STAGE
+    output logic shadow_reg_save_i,
+    output logic [CVA6Cfg.XLEN-1:0] next_sp_o,
     // CSR values to shadow - CSR Regfile
     input logic [CVA6Cfg.XLEN-1:0] shadow_mepc_i,
     input logic [CVA6Cfg.XLEN-1:0] shadow_mcause_i,
@@ -257,7 +258,6 @@ module issue_stage
       .x_commit_t(x_commit_t)
   ) i_issue_read_operands (
       .flush_i                 (flush_unissued_instr_i),
-      .ex_valid_i              (ex_valid_i),
       .issue_instr_i           (issue_instr_sb_iro),
       .orig_instr_i            (orig_instr_sb_iro),
       .issue_instr_valid_i     (issue_instr_valid_sb_iro),
@@ -272,6 +272,8 @@ module issue_stage
       .cvxif_valid_o           (xfu_valid_o),
       .cvxif_ready_i           (xfu_ready_i),
       .hart_id_i               (hart_id_i),
+      .shadow_reg_save_i,
+      .next_sp_o,
       .shadow_mepc_i,
       .shadow_mcause_i,
       .shru_valid_o,
