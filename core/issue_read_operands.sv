@@ -1039,6 +1039,7 @@ module issue_read_operands
     assign page_offset_matches_shru_o = '0;
     assign shru_store_ready_o =         '1;
     assign dcache_req_o.data_req =      '0;
+    assign next_sp_o =                  '0;
     ariane_regfile_fpga #(
         .CVA6Cfg      (CVA6Cfg),
         .DATA_WIDTH   (CVA6Cfg.XLEN),

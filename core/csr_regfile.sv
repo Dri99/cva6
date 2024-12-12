@@ -1657,7 +1657,7 @@ module csr_regfile
           if (CVA6Cfg.XLEN == 32) cyc_data_o = csr_wdata;
           else update_access_exception = 1'b1;
         end
-        riscv::CSR_LAST_SP: last_saved_sp_q = csr_wdata;
+        riscv::CSR_LAST_SP: last_saved_sp_d = csr_wdata;
         // PMP locked logic
         // 1. refuse to update any locked entry
         // 2. also refuse to update the entry below a locked TOR entry
@@ -2589,6 +2589,7 @@ module csr_regfile
       mcause_q         <= {CVA6Cfg.XLEN{1'b0}};
       mcounteren_q     <= {CVA6Cfg.XLEN{1'b0}};
       mscratch_q       <= {CVA6Cfg.XLEN{1'b0}};
+      last_saved_sp_q  <= {CVA6Cfg.XLEN{1'b0}};
       mtval_q          <= {CVA6Cfg.XLEN{1'b0}};
       fiom_q           <= '0;
       dcache_q         <= {{CVA6Cfg.XLEN - 1{1'b0}}, 1'b1};
