@@ -53,6 +53,8 @@ module extended_regfile
     input  logic     shru_store_valid_i,
     // Shadow register unit can handle another exception - ISSUE
     output logic shru_store_ready_o,
+    // Shadow register currently saving - CSR
+    output logic [4:0] shru_save_level_o,
     // LSU can accept a new instruction
     input  logic     lsu_ready_i,
     // Page offset Load unit wants to load - EX STAGE
@@ -94,7 +96,6 @@ module extended_regfile
       .*
   );
 
-  logic [ADDR_WIDTH-1:0] _shadow_save_level_o;
   shadow_register_controller #(
       .CVA6Cfg          (CVA6Cfg),
       .fu_data_t        (fu_data_t),
@@ -106,7 +107,7 @@ module extended_regfile
   ) i_shadow_register_controller (
       .shadow_reg_save_i,
       .shadow_ready_o      (shru_store_ready_o),
-      .shadow_save_level_o (_shadow_save_level_o),
+      .shadow_save_level_o (shru_save_level_o),
       .shadow_reg_raddr_o  (shadow_raddr_sh_ctrl_rf),
       .shadow_reg_rdata_i  (shadow_rdata_rf_sh_ctrl),
       .shadow_reg_sp_i     (shadow_sp_rf_sh_ctrl),

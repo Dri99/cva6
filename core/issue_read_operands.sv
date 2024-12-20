@@ -88,6 +88,8 @@ module issue_read_operands
     input logic shru_store_valid_i,
     // Shadow register unit can handle another exception - ISSUE
     output logic shru_store_ready_o,
+    // Shadow register currently saving - CSR
+    output logic [4:0] shru_save_level_o,
     // Page offset Load unit wants to load - EX STAGE
     input logic [11:0] page_offset_i,
     // Page offset is being saved in ShRU - EX STAGE
@@ -1028,6 +1030,7 @@ module issue_read_operands
         .next_sp_o,
         .lsu_ready_i,
         .shru_store_ready_o,
+        .shru_save_level_o,
         .page_offset_i,
         .page_offset_matches_shru_o,
         .dcache_req_i,
