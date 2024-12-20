@@ -55,6 +55,9 @@ module extended_regfile
     output logic shru_store_ready_o,
     // Shadow register currently saving - CSR
     output logic [4:0] shru_save_level_o,
+    // Shadow Register read port - CSR
+    input  logic [4:0] shru_raddr_i,
+    output logic [DATA_WIDTH-1:0] shru_rdata_o,
     // LSU can accept a new instruction
     input  logic     lsu_ready_i,
     // Page offset Load unit wants to load - EX STAGE
@@ -111,6 +114,8 @@ module extended_regfile
       .shadow_reg_raddr_o  (shadow_raddr_sh_ctrl_rf),
       .shadow_reg_rdata_i  (shadow_rdata_rf_sh_ctrl),
       .shadow_reg_sp_i     (shadow_sp_rf_sh_ctrl),
+      .csr_raddr_i         (shru_raddr_i),
+      .csr_rdata_o         (shru_rdata_o),
       .shru_valid_o,
       .shru_fu_data_o,
       .shru_store_valid_i,
@@ -121,6 +126,5 @@ module extended_regfile
       .dcache_req_o,
       .*
   );
-
 endmodule
 

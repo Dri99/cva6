@@ -45,7 +45,10 @@ import ariane_pkg::*;
   // Data cache request ouput - CACHE
   input  dcache_req_o_t dcache_req_i,
   // Data cache request input - CACHE
-  output dcache_req_i_t dcache_req_o
+  output dcache_req_i_t dcache_req_o,
+  // Csr read port - 
+  input  logic [ADDR_WIDTH-1:0] csr_raddr_i,
+  output logic [DATA_WIDTH-1:0] csr_rdata_o
 );
   logic [ADDR_WIDTH-1:0]   cnt_q, cnt_d;
   logic [DATA_WIDTH-1:0]   stack_q, stack_d;
@@ -126,7 +129,8 @@ import ariane_pkg::*;
   end
 
   assign shadow_save_level_o = cnt_q;
-  assign shadow_reg_raddr_o = cnt_q;
+  assign shadow_reg_raddr_o = shadow_ready_o ? csr_raddr_i : cnt_q;
+  assign csr_rdata_o = shadow_ready_o ? shadow_reg_rdata_i : {(CVA6Cfg.XLEN/8){8'haa}};
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (!rst_ni) begin
       save_state_q <= IDLE;

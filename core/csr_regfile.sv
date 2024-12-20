@@ -183,6 +183,9 @@ module csr_regfile
     input  logic [CVA6Cfg.XLEN-1:0] sp_n_i,
     input  logic [4:0] shru_save_level_i,
     input  logic shru_store_ready_i,
+    // Shadow Register read port - CSR
+    output logic [4:0] shru_raddr_o,
+    input  logic [CVA6Cfg.XLEN-1:0] shru_rdata_i,
     // TO_BE_COMPLETED - PERF_COUNTERS
     output logic [31:0] mcountinhibit_o,
     // RVFI
@@ -213,6 +216,8 @@ module csr_regfile
 
   typedef struct packed {
     logic ready;
+    logic [2:0] zero1;
+    logic [4:0] raddr;
     logic [2:0] zero;
     logic [4:0] save_level;
   } shadow_status_t;
@@ -302,6 +307,7 @@ module csr_regfile
   logic [MHPMCounterNum+3-1:0] mcountinhibit_d, mcountinhibit_q;
   logic [CVA6Cfg.XLEN-1:0] last_saved_sp_q, last_saved_sp_d;
   shadow_status_t shadow_status;
+  logic [4:0] shru_raddr_d, shru_raddr_q;
 
   localparam logic [CVA6Cfg.XLEN-1:0] IsaCode = (CVA6Cfg.XLEN'(CVA6Cfg.RVA) <<  0)                // A - Atomic Instructions extension
   | (CVA6Cfg.XLEN'(CVA6Cfg.RVB) << 1)  // B - Bitmanip extension
@@ -340,7 +346,9 @@ module csr_regfile
 
   assign shadow_status.save_level = shru_save_level_i;
   assign shadow_status.zero       = '0;
+  assign shadow_status.raddr      = shru_raddr_q;
   assign shadow_status.ready      = shru_store_ready_i;
+  assign shadow_status.zero1      = '0;
   // ----------------
   // CSR Read logic
   // ----------------
@@ -801,6 +809,7 @@ module csr_regfile
         end
         riscv::CSR_LAST_SP: csr_rdata = last_saved_sp_q;
         riscv::CSR_SHADOW_STATUS: csr_rdata = {{(CVA6Cfg.XLEN - $bits(shadow_status)) {1'b0}}, shadow_status};
+        riscv::CSR_SHADOW_REG: csr_rdata = shru_rdata_i;
         // PMPs
         riscv::CSR_PMPCFG0,
                 riscv::CSR_PMPCFG1,
@@ -958,6 +967,7 @@ module csr_regfile
     cyc_we_o                        = 1'b0;
     cyc_data_o                      = 'b0; 
     last_saved_sp_d                 = shadow_reg_save_o ? sp_n_i : last_saved_sp_q;
+    shru_raddr_d                    = shru_raddr_q;
 
     fcsr_d                          = fcsr_q;
 
@@ -1671,7 +1681,11 @@ module csr_regfile
           else update_access_exception = 1'b1;
         end
         riscv::CSR_LAST_SP: last_saved_sp_d = csr_wdata;
-        riscv::CSR_SHADOW_STATUS: ;//do nothing
+        riscv::CSR_SHADOW_STATUS: begin
+          automatic shadow_status_t casted_wdata = shadow_status_t'(csr_wdata[($bits(shadow_status))-1:0]);
+          shru_raddr_d = casted_wdata.raddr;
+        end
+        riscv::CSR_SHADOW_REG: ;//DO nothing
         // PMP locked logic
         // 1. refuse to update any locked entry
         // 2. also refuse to update the entry below a locked TOR entry
@@ -2604,6 +2618,7 @@ module csr_regfile
       mcounteren_q     <= {CVA6Cfg.XLEN{1'b0}};
       mscratch_q       <= {CVA6Cfg.XLEN{1'b0}};
       last_saved_sp_q  <= {CVA6Cfg.XLEN{1'b0}};
+      shru_raddr_q     <= {CVA6Cfg.XLEN{1'b0}};
       mtval_q          <= {CVA6Cfg.XLEN{1'b0}};
       fiom_q           <= '0;
       dcache_q         <= {{CVA6Cfg.XLEN - 1{1'b0}}, 1'b1};
@@ -2685,6 +2700,7 @@ module csr_regfile
       mcounteren_q     <= mcounteren_d;
       mscratch_q       <= mscratch_d;
       last_saved_sp_q  <= last_saved_sp_d;
+      shru_raddr_q     <= shru_raddr_d;
       if (CVA6Cfg.TvalEn) mtval_q <= mtval_d;
       fiom_q          <= fiom_d;
       dcache_q        <= dcache_d;

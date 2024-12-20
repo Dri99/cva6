@@ -90,6 +90,9 @@ module issue_read_operands
     output logic shru_store_ready_o,
     // Shadow register currently saving - CSR
     output logic [4:0] shru_save_level_o,
+    // Shadow Register read port - CSR
+    input  logic [4:0] shru_raddr_i,
+    output logic [CVA6Cfg.XLEN-1:0] shru_rdata_o,
     // Page offset Load unit wants to load - EX STAGE
     input logic [11:0] page_offset_i,
     // Page offset is being saved in ShRU - EX STAGE
@@ -1031,6 +1034,8 @@ module issue_read_operands
         .lsu_ready_i,
         .shru_store_ready_o,
         .shru_save_level_o,
+        .shru_raddr_i,
+        .shru_rdata_o,
         .page_offset_i,
         .page_offset_matches_shru_o,
         .dcache_req_i,
@@ -1043,6 +1048,7 @@ module issue_read_operands
     assign shru_store_ready_o =         '1;
     assign dcache_req_o.data_req =      '0;
     assign next_sp_o =                  '0;
+    assign shru_rdata_o =               '0;
     ariane_regfile_fpga #(
         .CVA6Cfg      (CVA6Cfg),
         .DATA_WIDTH   (CVA6Cfg.XLEN),
@@ -1058,8 +1064,11 @@ module issue_read_operands
         .*
     );
   end else begin : gen_asic_regfile
-    automatic logic _shadow_rdata_o;
     automatic logic _shadow_sp_o;
+    assign shru_valid_o =               '0;
+    assign page_offset_matches_shru_o = '0;
+    assign shru_store_ready_o =         '1;
+    assign next_sp_o =                  '0;
     ariane_regfile #(
         .CVA6Cfg      (CVA6Cfg),
         .DATA_WIDTH   (CVA6Cfg.XLEN),
@@ -1077,7 +1086,7 @@ module issue_read_operands
         .shadow_mcause_i    ('b0),
         .shadow_save_i      ('b0),
         .shadow_raddr_i     ('b0),
-        .shadow_rdata_o     (_shadow_rdata_o),
+        .shadow_rdata_o     (shru_rdata_o),
         .shadow_sp_o        (_shadow_sp_o),
         .*
     );

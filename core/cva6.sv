@@ -450,6 +450,8 @@ module cva6
   logic        page_offset_matches_shru_issue_ex;
   logic        shru_store_ready;
   logic [4:0]  shru_save_level_issue_csr;
+  logic [4:0] shru_raddr_csr_issue;
+  logic [CVA6Cfg.XLEN-1:0] shru_rdata_issue_csr;
 
   logic [CVA6Cfg.XLEN-1:0] store_result_ex_id;
   logic [CVA6Cfg.TRANS_ID_BITS-1:0] store_trans_id_ex_id;
@@ -859,6 +861,8 @@ module cva6
       .shru_store_valid_i      (shru_store_valid_ex_id),
       .shru_store_ready_o      (shru_store_ready),
       .shru_save_level_o       (shru_save_level_issue_csr),
+      .shru_raddr_i            (shru_raddr_csr_issue),
+      .shru_rdata_o            (shru_rdata_issue_csr),
       .page_offset_i             (page_offset_ex_issue),
       .page_offset_matches_shru_o(page_offset_matches_shru_issue_ex),
       .dcache_req_i              (dcache_req_ports_cache_issue),
@@ -1198,6 +1202,8 @@ module cva6
       .shadow_mcause_o         (shadow_mcause_csr_issue),
       .shru_save_level_i       (shru_save_level_issue_csr), 
       .shru_store_ready_i      (shru_store_ready),
+      .shru_raddr_o            (shru_raddr_csr_issue),
+      .shru_rdata_i            (shru_rdata_issue_csr),
       .sp_n_i                  (next_sp_issue_csr),
       .mcountinhibit_o         (mcountinhibit_csr_perf),
       //RVFI
