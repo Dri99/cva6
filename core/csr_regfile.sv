@@ -2806,5 +2806,13 @@ module csr_regfile
   assign rvfi_csr_o.pmpcfg_q = pmpcfg_q;
   assign rvfi_csr_o.pmpaddr_q = pmpaddr_q;
 
+`ifndef SYNTHESIS
+  export "DPI-C" function set_dcsr;
 
+  task set_dcsr;
+   input bit [31:0] in_dcsr;
+   dcsr_d = in_dcsr;
+  endtask
+
+`endif
 endmodule

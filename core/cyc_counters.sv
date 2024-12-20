@@ -50,6 +50,7 @@ module cyc_counters
     data_o = 'b0;
     read_access_exception = 1'b0;
     update_access_exception = 1'b0;
+    cyc_accounting_status_d = cyc_accounting_status_q;
     casted_data_i = cyc_accounting_status_t'(data_i[31:0]);
     // Increment the enabled counter
     if ((!debug_mode_i) && (!we_i)) begin

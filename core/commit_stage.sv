@@ -417,6 +417,19 @@ module commit_stage
     // Call C function
     return pc_o;
   endfunction
+
+  export "DPI-C" function get_ex_valid;
+  function bit get_ex_valid();
+    // Call C function
+    return exception_o.valid;
+  endfunction
+
+  export "DPI-C" function get_ex_cause;
+  function longint get_ex_cause();
+    // Call C function
+    return exception_o.cause;
+  endfunction
+  
 `endif
 
 endmodule
