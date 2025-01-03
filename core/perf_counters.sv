@@ -60,7 +60,8 @@ module perf_counters
     input logic [31:0] mcountinhibit_i,
     input logic shadow_reg_activation_i,
     input logic exception_i,
-    input logic debug_mode_enters_i
+    input logic debug_mode_enters_i,
+    input logic shru_store_ready_i
 );
 
   typedef logic [11:0] csr_addr_t;
@@ -85,7 +86,7 @@ module perf_counters
   logic [CVA6Cfg.NrCommitPorts-1:0] fp_event;
   logic [CVA6Cfg.NrCommitPorts-1:0] mret_event;
   logic [CVA6Cfg.NrCommitPorts-1:0] dret_event;
-
+  logic latch_shru_store_ready;
   //Multiplexer
   always_comb begin : Mux
     events[MHPMCounterNum:1] = '{default: 0};
@@ -145,8 +146,8 @@ module perf_counters
         5'b10111: events[i] = |mret_event; //23
         5'b11000: events[i] = |dret_event; //24
         5'b11001: events[i] = shadow_reg_activation_i; //25
-        5'b11010: events[i] = exception_i; //26
-        5'b11011: events[i] = debug_mode_enters_i; //27
+        5'b11010: events[i] = latch_shru_store_ready & !shru_store_ready_i; //26
+        5'b11011: events[i] = !latch_shru_store_ready & shru_store_ready_i; //27
         default: events[i] = 0;
       endcase
     end
@@ -223,9 +224,11 @@ module perf_counters
     if (!rst_ni) begin
       generic_counter_q <= '{default: 0};
       mhpmevent_q       <= '{default: 0};
+      latch_shru_store_ready <= 0;
     end else begin
       generic_counter_q <= generic_counter_d;
       mhpmevent_q       <= mhpmevent_d;
+      latch_shru_store_ready = shru_store_ready_i;
     end
   end
 

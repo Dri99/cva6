@@ -349,6 +349,8 @@ module csr_regfile
   assign shadow_status.raddr      = shru_raddr_q;
   assign shadow_status.ready      = shru_store_ready_i;
   assign shadow_status.zero1      = '0;
+
+  assign shru_raddr_o             = shru_raddr_q;
   // ----------------
   // CSR Read logic
   // ----------------

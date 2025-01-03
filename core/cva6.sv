@@ -1259,7 +1259,8 @@ module cva6
         .mcountinhibit_i         (mcountinhibit_csr_perf),
         .shadow_reg_activation_i (shadow_reg_save_csr_issue),
         .exception_i             (ex_commit.valid),
-        .debug_mode_enters_i     (set_debug_pc)
+        .debug_mode_enters_i     (set_debug_pc),
+        .shru_store_ready_i      (shru_store_ready)
     );
   end : gen_perf_counter
   else begin : gen_no_perf_counter
