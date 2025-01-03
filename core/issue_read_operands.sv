@@ -75,7 +75,7 @@ module issue_read_operands
     // Load Store Unit result is valid - TO_BE_COMPLETED
     output logic [CVA6Cfg.NrIssuePorts-1:0] lsu_valid_o,
     // Trigger save logic - ISSUE STAGE
-    output logic shadow_reg_save_i,
+    input logic shadow_reg_save_i,
     output logic [CVA6Cfg.XLEN-1:0] next_sp_o,
     // CSR values to shadow - CSR Regfile
     input logic [CVA6Cfg.XLEN-1:0] shadow_mepc_i,

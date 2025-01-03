@@ -40,7 +40,7 @@ module extended_regfile
     input  logic [CVA6Cfg.NrCommitPorts-1:0][DATA_WIDTH-1:0] wdata_i,
     input  logic [CVA6Cfg.NrCommitPorts-1:0]                 we_i,
     // Trigger save logic - ISSUE STAGE
-    output logic shadow_reg_save_i,
+    input logic shadow_reg_save_i,
     output logic [DATA_WIDTH-1:0] next_sp_o,
     // CSR values to shadow - CSR Regfile
     input  logic [DATA_WIDTH-1:0] shadow_mepc_i,

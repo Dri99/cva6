@@ -22,7 +22,7 @@ import ariane_pkg::*;
   input logic                   clk_i,
   input logic                   rst_ni,
   // Trigger save logic - ISSUE STAGE
-  output logic shadow_reg_save_i,
+  input logic shadow_reg_save_i,
   // whether we are ready to process another interrupt (for nesting)
   output logic                  shadow_ready_o,
   output logic [ADDR_WIDTH-1:0] shadow_save_level_o,
