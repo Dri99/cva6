@@ -926,7 +926,7 @@ module csr_regfile
     automatic satp_t vsatp;
     automatic hgatp_t hgatp;
     automatic logic [63:0] instret;
-
+    automatic logic ebreak_avoid_ex;
     if (CVA6Cfg.RVS) begin
       satp = satp_q;
     end
@@ -935,7 +935,7 @@ module csr_regfile
       vsatp = vsatp_q;
     end
     instret         = instret_q;
-
+    ebreak_avoid_ex = 0;
     mcountinhibit_d = mcountinhibit_q;
 
     // --------------------
@@ -1853,6 +1853,103 @@ module csr_regfile
     // Timer interrupt pending, coming from platform timer
     mip_d[riscv::IRQ_M_TIMER] = time_irq_i;
 
+    // ------------------------------
+    // Debug
+    // ------------------------------
+    // Explains why Debug Mode was entered.
+    // When there are multiple reasons to enter Debug Mode in a single cycle, hardware should set cause to the cause with the highest priority.
+    // 1: An ebreak instruction was executed. (priority 3)
+    // 2: The Trigger Module caused a breakpoint exception. (priority 4)
+    // 3: The debugger requested entry to Debug Mode. (priority 2)
+    // 4: The hart single stepped because step was set. (priority 1)
+    // we are currently not in debug mode and could potentially enter
+    if (!debug_mode_q) begin
+      dcsr_d.prv = priv_lvl_o;
+      // save virtualization mode bit
+      dcsr_d.v   = (!CVA6Cfg.RVH) ? 1'b0 : v_q;
+      // trigger module fired
+
+      // caused by a breakpoint
+      if (CVA6Cfg.DebugEn && ex_i.valid && ex_i.cause == riscv::BREAKPOINT) begin
+        dcsr_d.prv = priv_lvl_o;
+        // save virtualization mode bit
+        dcsr_d.v   = (!CVA6Cfg.RVH) ? 1'b0 : v_q;
+        // check that we actually want to enter debug depending on the privilege level we are currently in
+        unique case (priv_lvl_o)
+          riscv::PRIV_LVL_M: begin
+            debug_mode_d    = dcsr_q.ebreakm;
+            set_debug_pc_o  = dcsr_q.ebreakm;
+            ebreak_avoid_ex = dcsr_q.ebreakm; 
+          end
+          riscv::PRIV_LVL_S: begin
+            if (CVA6Cfg.RVS) begin
+              debug_mode_d    = (CVA6Cfg.RVH && v_q) ? dcsr_q.ebreakvs : dcsr_q.ebreaks;
+              set_debug_pc_o  = (CVA6Cfg.RVH && v_q) ? dcsr_q.ebreakvs : dcsr_q.ebreaks;
+              ebreak_avoid_ex = (CVA6Cfg.RVH && v_q) ? dcsr_q.ebreakvs : dcsr_q.ebreaks;
+            end
+          end
+          riscv::PRIV_LVL_U: begin
+            if (CVA6Cfg.RVU) begin
+              debug_mode_d    = (CVA6Cfg.RVH && v_q) ? dcsr_q.ebreakvu : dcsr_q.ebreaku;
+              set_debug_pc_o  = (CVA6Cfg.RVH && v_q) ? dcsr_q.ebreakvu : dcsr_q.ebreaku;
+              ebreak_avoid_ex = (CVA6Cfg.RVH && v_q) ? dcsr_q.ebreakvu : dcsr_q.ebreaku;
+            end
+          end
+          default: ;
+        endcase
+        // save PC of next this instruction e.g.: the next one to be executed
+        dpc_d = {{CVA6Cfg.XLEN - CVA6Cfg.VLEN{pc_i[CVA6Cfg.VLEN-1]}}, pc_i};
+        dcsr_d.cause = ariane_pkg::CauseBreakpoint;
+      end
+
+      // we've got a debug request
+      if (CVA6Cfg.DebugEn && ex_i.valid && ex_i.cause == riscv::DEBUG_REQUEST) begin
+        dcsr_d.prv = priv_lvl_o;
+        dcsr_d.v = (!CVA6Cfg.RVH) ? 1'b0 : v_q;
+        // save the PC
+        dpc_d = {{CVA6Cfg.XLEN - CVA6Cfg.VLEN{pc_i[CVA6Cfg.VLEN-1]}}, pc_i};
+        // enter debug mode
+        debug_mode_d = 1'b1;
+        // jump to the base address
+        set_debug_pc_o = 1'b1;
+        // save the cause as external debug request
+        dcsr_d.cause = ariane_pkg::CauseRequest;
+      end
+
+      // single step enable and we just retired an instruction
+      if (CVA6Cfg.DebugEn && dcsr_q.step && commit_ack_i[0]) begin
+        dcsr_d.prv = priv_lvl_o;
+        dcsr_d.v   = (!CVA6Cfg.RVH) ? 1'b0 : v_q;
+        // valid CTRL flow change
+        if (commit_instr_i[0].fu == CTRL_FLOW) begin
+          // we saved the correct target address during execute
+          dpc_d = {
+            {CVA6Cfg.XLEN - CVA6Cfg.VLEN{commit_instr_i[0].bp.predict_address[CVA6Cfg.VLEN-1]}},
+            commit_instr_i[0].bp.predict_address
+          };
+          // exception valid
+        end else if (ex_i.valid) begin
+          dpc_d = {{CVA6Cfg.XLEN - CVA6Cfg.VLEN{1'b0}}, trap_vector_base_o};
+          // return from environment
+        end else if (eret_o) begin
+          dpc_d = {{CVA6Cfg.XLEN - CVA6Cfg.VLEN{1'b0}}, epc_o};
+          // consecutive PC
+        end else begin
+          dpc_d = {
+            {CVA6Cfg.XLEN - CVA6Cfg.VLEN{commit_instr_i[0].pc[CVA6Cfg.VLEN-1]}},
+            commit_instr_i[0].pc + (commit_instr_i[0].is_compressed ? 'h2 : 'h4)
+          };
+        end
+        debug_mode_d   = 1'b1;
+        set_debug_pc_o = 1'b1;
+        dcsr_d.cause   = ariane_pkg::CauseSingleStep;
+      end
+    end
+    // go in halt-state again when we encounter an exception
+    if (CVA6Cfg.DebugEn && debug_mode_q && ex_i.valid && ex_i.cause == riscv::BREAKPOINT) begin
+      set_debug_pc_o = 1'b1;
+    end
+
     // -----------------------
     // Manage Exception Stack
     // -----------------------
@@ -1862,7 +1959,7 @@ module csr_regfile
     trap_to_v = 1'b0;
     // Exception is taken and we are not in debug mode
     // exceptions in debug mode don't update any fields
-    if ((CVA6Cfg.DebugEn && !debug_mode_q && ex_i.cause != riscv::DEBUG_REQUEST && ex_i.valid) || (!CVA6Cfg.DebugEn && ex_i.valid)) begin
+    if ((CVA6Cfg.DebugEn && !debug_mode_q && ex_i.cause != riscv::DEBUG_REQUEST && ex_i.valid && !(ex_i.cause == riscv::BREAKPOINT && ebreak_avoid_ex)) || (!CVA6Cfg.DebugEn && ex_i.valid)) begin
       // do not flush, flush is reserved for CSR writes with side effects
       flush_o = 1'b0;
       // figure out where to trap to
@@ -2013,100 +2110,6 @@ module csr_regfile
       if (CVA6Cfg.RVH) begin
         v_d = trap_to_v;
       end
-    end
-
-    // ------------------------------
-    // Debug
-    // ------------------------------
-    // Explains why Debug Mode was entered.
-    // When there are multiple reasons to enter Debug Mode in a single cycle, hardware should set cause to the cause with the highest priority.
-    // 1: An ebreak instruction was executed. (priority 3)
-    // 2: The Trigger Module caused a breakpoint exception. (priority 4)
-    // 3: The debugger requested entry to Debug Mode. (priority 2)
-    // 4: The hart single stepped because step was set. (priority 1)
-    // we are currently not in debug mode and could potentially enter
-    if (!debug_mode_q) begin
-      dcsr_d.prv = priv_lvl_o;
-      // save virtualization mode bit
-      dcsr_d.v   = (!CVA6Cfg.RVH) ? 1'b0 : v_q;
-      // trigger module fired
-
-      // caused by a breakpoint
-      if (CVA6Cfg.DebugEn && ex_i.valid && ex_i.cause == riscv::BREAKPOINT) begin
-        dcsr_d.prv = priv_lvl_o;
-        // save virtualization mode bit
-        dcsr_d.v   = (!CVA6Cfg.RVH) ? 1'b0 : v_q;
-        // check that we actually want to enter debug depending on the privilege level we are currently in
-        unique case (priv_lvl_o)
-          riscv::PRIV_LVL_M: begin
-            debug_mode_d   = dcsr_q.ebreakm;
-            set_debug_pc_o = dcsr_q.ebreakm;
-          end
-          riscv::PRIV_LVL_S: begin
-            if (CVA6Cfg.RVS) begin
-              debug_mode_d   = (CVA6Cfg.RVH && v_q) ? dcsr_q.ebreakvs : dcsr_q.ebreaks;
-              set_debug_pc_o = (CVA6Cfg.RVH && v_q) ? dcsr_q.ebreakvs : dcsr_q.ebreaks;
-            end
-          end
-          riscv::PRIV_LVL_U: begin
-            if (CVA6Cfg.RVU) begin
-              debug_mode_d   = (CVA6Cfg.RVH && v_q) ? dcsr_q.ebreakvu : dcsr_q.ebreaku;
-              set_debug_pc_o = (CVA6Cfg.RVH && v_q) ? dcsr_q.ebreakvu : dcsr_q.ebreaku;
-            end
-          end
-          default: ;
-        endcase
-        // save PC of next this instruction e.g.: the next one to be executed
-        dpc_d = {{CVA6Cfg.XLEN - CVA6Cfg.VLEN{pc_i[CVA6Cfg.VLEN-1]}}, pc_i};
-        dcsr_d.cause = ariane_pkg::CauseBreakpoint;
-      end
-
-      // we've got a debug request
-      if (CVA6Cfg.DebugEn && ex_i.valid && ex_i.cause == riscv::DEBUG_REQUEST) begin
-        dcsr_d.prv = priv_lvl_o;
-        dcsr_d.v = (!CVA6Cfg.RVH) ? 1'b0 : v_q;
-        // save the PC
-        dpc_d = {{CVA6Cfg.XLEN - CVA6Cfg.VLEN{pc_i[CVA6Cfg.VLEN-1]}}, pc_i};
-        // enter debug mode
-        debug_mode_d = 1'b1;
-        // jump to the base address
-        set_debug_pc_o = 1'b1;
-        // save the cause as external debug request
-        dcsr_d.cause = ariane_pkg::CauseRequest;
-      end
-
-      // single step enable and we just retired an instruction
-      if (CVA6Cfg.DebugEn && dcsr_q.step && commit_ack_i[0]) begin
-        dcsr_d.prv = priv_lvl_o;
-        dcsr_d.v   = (!CVA6Cfg.RVH) ? 1'b0 : v_q;
-        // valid CTRL flow change
-        if (commit_instr_i[0].fu == CTRL_FLOW) begin
-          // we saved the correct target address during execute
-          dpc_d = {
-            {CVA6Cfg.XLEN - CVA6Cfg.VLEN{commit_instr_i[0].bp.predict_address[CVA6Cfg.VLEN-1]}},
-            commit_instr_i[0].bp.predict_address
-          };
-          // exception valid
-        end else if (ex_i.valid) begin
-          dpc_d = {{CVA6Cfg.XLEN - CVA6Cfg.VLEN{1'b0}}, trap_vector_base_o};
-          // return from environment
-        end else if (eret_o) begin
-          dpc_d = {{CVA6Cfg.XLEN - CVA6Cfg.VLEN{1'b0}}, epc_o};
-          // consecutive PC
-        end else begin
-          dpc_d = {
-            {CVA6Cfg.XLEN - CVA6Cfg.VLEN{commit_instr_i[0].pc[CVA6Cfg.VLEN-1]}},
-            commit_instr_i[0].pc + (commit_instr_i[0].is_compressed ? 'h2 : 'h4)
-          };
-        end
-        debug_mode_d   = 1'b1;
-        set_debug_pc_o = 1'b1;
-        dcsr_d.cause   = ariane_pkg::CauseSingleStep;
-      end
-    end
-    // go in halt-state again when we encounter an exception
-    if (CVA6Cfg.DebugEn && debug_mode_q && ex_i.valid && ex_i.cause == riscv::BREAKPOINT) begin
-      set_debug_pc_o = 1'b1;
     end
 
     // ------------------------------
