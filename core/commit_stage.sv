@@ -84,6 +84,10 @@ module commit_stage
     output logic flush_commit_o,
     // Shadow register unit can handle another exception - ISSUE
     input logic shadow_ready_i,
+    // Request to commit an mret - ISSUE STAGE
+    output logic shru_mret_valid_o,
+    // Mret request accepted - ISSUE STAGE
+    input logic shru_mret_ready_i,
     // Flush TLBs and pipeline - CONTROLLER
     output logic sfence_vma_o,
     output logic hfence_vvma_o,
@@ -124,6 +128,7 @@ module commit_stage
   assign commit_tran_id_o = commit_instr_i[0].trans_id;
 
   logic instr_0_is_amo;
+  logic stall_commit;
   logic [CVA6Cfg.NrCommitPorts-1:0] commit_macro_ack;
   assign instr_0_is_amo = is_amo(commit_instr_i[0].op);
   // -------------------
@@ -145,6 +150,7 @@ module commit_stage
     wdata_o[0] = (CVA6Cfg.RVA && amo_resp_i.ack) ? amo_resp_i.result[CVA6Cfg.XLEN-1:0] : commit_instr_i[0].result;
     csr_op_o = ADD;  // this corresponds to a CSR NOP
     csr_wdata_o = {CVA6Cfg.XLEN{1'b0}};
+    shru_mret_valid_o = 1'b0;
     fence_i_o = 1'b0;
     fence_o = 1'b0;
     sfence_vma_o = 1'b0;
@@ -152,6 +158,7 @@ module commit_stage
     hfence_gvma_o = 1'b0;
     csr_write_fflags_o = 1'b0;
     flush_commit_o = 1'b0;
+    stall_commit = 1'b0;
 
     // we do not commit the instruction yet if we requested a halt
     if (commit_instr_i[0].valid && !halt_i) begin
@@ -210,7 +217,20 @@ module commit_stage
           csr_op_o    = commit_instr_i[0].op;
           csr_wdata_o = commit_instr_i[0].result;
           if (!commit_drop_i[0]) begin
-            if (!csr_exception_i.valid) begin
+            if(commit_instr_i[0].op == MRET) begin
+              shru_mret_valid_o = 1'b1;
+              if(shru_mret_ready_i == 1'b0) begin
+                commit_csr_o = 1'b0;
+                csr_op_o    = ADD;
+                csr_wdata_o = {CVA6Cfg.XLEN{1'b0}};
+                commit_csr_o = 1'b0;
+                commit_ack_o[0] = 1'b0;
+                we_gpr_o[0] = 1'b0;
+                stall_commit = 1'b1;
+              end
+            end
+
+            if (!stall_commit & !csr_exception_i.valid) begin
               commit_csr_o = 1'b1;
               wdata_o[0]   = csr_rdata_i;
             end else begin

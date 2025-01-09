@@ -452,6 +452,11 @@ module cva6
   logic [4:0]  shru_save_level_issue_csr;
   logic [4:0] shru_raddr_csr_issue;
   logic [CVA6Cfg.XLEN-1:0] shru_rdata_issue_csr;
+  logic shru_load_valid_csr_issue;
+  logic shru_load_ack_issue_csr;
+  logic [4:0] shru_load_level_issue_csr;
+  logic shru_mret_commit_valid_csr_issue;
+  logic shru_mret_commit_ready_issue_csr;
 
   logic [CVA6Cfg.XLEN-1:0] store_result_ex_id;
   logic [CVA6Cfg.TRANS_ID_BITS-1:0] store_trans_id_ex_id;
@@ -865,6 +870,11 @@ module cva6
       .shru_rdata_o            (shru_rdata_issue_csr),
       .page_offset_i             (page_offset_ex_issue),
       .page_offset_matches_shru_o(page_offset_matches_shru_issue_ex),
+      .shru_load_valid_i         (shru_load_valid_csr_issue),
+      .shru_load_ack_o           (shru_load_ack_issue_csr),
+      .shru_load_level_o         (shru_load_level_issue_csr),
+      .shru_mret_commit_valid_i  (shru_mret_commit_valid_csr_issue),
+      .shru_mret_commit_ready_o  (shru_mret_commit_ready_issue_csr),
       .dcache_req_i              (dcache_req_ports_cache_issue),
       .dcache_req_o              (dcache_req_ports_issue_cache),
       // Multiplier
@@ -1113,6 +1123,8 @@ module cva6
       .hfence_gvma_o     (hfence_gvma_commit_controller),
       .flush_commit_o    (flush_commit),
       .shadow_ready_i    (shru_store_ready),
+      .shru_mret_valid_o (shru_mret_commit_valid_csr_issue),
+      .shru_mret_ready_i (shru_mret_commit_ready_issue_csr),
       .*
   );
 
@@ -1205,6 +1217,9 @@ module cva6
       .shru_raddr_o            (shru_raddr_csr_issue),
       .shru_rdata_i            (shru_rdata_issue_csr),
       .sp_n_i                  (next_sp_issue_csr),
+      .shru_load_valid_o       (shru_load_valid_csr_issue),
+      .shru_load_ack_i         (shru_load_ack_issue_csr),
+      .shru_load_level_i       (shru_load_level_issue_csr),
       .mcountinhibit_o         (mcountinhibit_csr_perf),
       //RVFI
       .rvfi_csr_o              (rvfi_csr),

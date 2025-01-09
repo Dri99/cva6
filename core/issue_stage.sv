@@ -98,6 +98,16 @@ module issue_stage
     input logic [11:0] page_offset_i,
     // Page offset is being saved in ShRU - EX STAGE
     output logic page_offset_matches_shru_o,
+    // Request to begin an asynchronous load - CSR
+    input  logic shru_load_valid_i,
+    // Load request accepted - CSR
+    output  logic shru_load_ack_o,
+    // Register not yet loaded - CSR
+    output logic [4:0] shru_load_level_o,
+    // Request to commit an mret - COMMIT STAGE
+    input logic shru_mret_commit_valid_i,
+    // Mret request accepted - COMMIT STAGE
+    output logic shru_mret_commit_ready_o,
     // Data cache request ouput - CACHE
     input  dcache_req_o_t dcache_req_i,
     // Data cache request input - CACHE
@@ -288,6 +298,11 @@ module issue_stage
       .shru_save_level_o,
       .shru_raddr_i,
       .shru_rdata_o,
+      .shru_load_valid_i,
+      .shru_load_ack_o,
+      .shru_load_level_o,
+      .shru_mret_commit_valid_i,
+      .shru_mret_commit_ready_o,
       .page_offset_i,
       .page_offset_matches_shru_o,
       .dcache_req_i,

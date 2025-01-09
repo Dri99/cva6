@@ -67,7 +67,17 @@ module extended_regfile
     // Data cache request ouput - CACHE
     input  dcache_req_o_t dcache_req_i,
     // Data cache request input - CACHE
-    output dcache_req_i_t dcache_req_o
+    output dcache_req_i_t dcache_req_o,
+    // Request to begin an asynchronous load - CSR
+    input  logic shru_load_valid_i,
+    // Load request accepted - CSR
+    output  logic shru_load_ack_o,
+    // Register not yet loaded - CSR
+    output logic [4:0] shru_load_level_o,
+    // Request to commit an mret - COMMIT STAGE
+    input logic shru_mret_commit_valid_i,
+    // Mret request accepted - COMMIT STAGE
+    output logic shru_mret_commit_ready_o
 );
   localparam int unsigned ADDR_WIDTH = 5;
   logic [ADDR_WIDTH-1:0] shadow_raddr_sh_ctrl_rf;
@@ -116,6 +126,9 @@ module extended_regfile
       .shadow_reg_sp_i     (shadow_sp_rf_sh_ctrl),
       .csr_raddr_i         (shru_raddr_i),
       .csr_rdata_o         (shru_rdata_o),
+      .shadow_load_level_o (shru_load_level_o),
+      .mret_valid_i        (shru_mret_commit_valid_i),
+      .mret_ready_o        (shru_mret_commit_ready_o),
       .shru_valid_o,
       .shru_fu_data_o,
       .shru_store_valid_i,
@@ -124,6 +137,8 @@ module extended_regfile
       .page_offset_matches_shru_o,
       .dcache_req_i,
       .dcache_req_o,
+      .shru_load_valid_i,
+      .shru_load_ack_o,
       .*
   );
 endmodule

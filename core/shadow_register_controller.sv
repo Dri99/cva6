@@ -48,14 +48,24 @@ import ariane_pkg::*;
   output dcache_req_i_t dcache_req_o,
   // Csr read port - 
   input  logic [ADDR_WIDTH-1:0] csr_raddr_i,
-  output logic [DATA_WIDTH-1:0] csr_rdata_o
+  output logic [DATA_WIDTH-1:0] csr_rdata_o,
+  // Request to begin an asynchronous load - CSR
+  input  logic shru_load_valid_i,
+  // Load request accepted - CSR
+  output  logic shru_load_ack_o,
+  // Register not yet loaded - CSR
+  output logic [ADDR_WIDTH-1:0] shadow_load_level_o,
+  // Request to commit an mret - COMMIT STAGE
+  input logic mret_valid_i,
+  // Mret request accepted - COMMIT STAGE
+  output logic mret_ready_o
 );
   logic [ADDR_WIDTH-1:0]   cnt_q, cnt_d;
   logic [DATA_WIDTH-1:0]   stack_q, stack_d;
   logic [CVA6Cfg.PLEN-1:0] p_addr;
   localparam int unsigned SHADOW_RELOAD = NUM_SHADOW_SAVES - 1;
   typedef enum logic [1:0] {
-    IDLE, SAVE
+    IDLE_SAVE, SAVE
   } save_state_e;
   save_state_e save_state_d, save_state_q;
 
@@ -98,7 +108,7 @@ import ariane_pkg::*;
     page_offset_matches_shru_o = '0;
     dcache_req_o.data_req = '0;
     unique case (save_state_q)
-      IDLE: begin
+      IDLE_SAVE: begin
         cnt_d = SHADOW_RELOAD;
         if (shadow_reg_save_i) begin
           save_state_d = SAVE;
@@ -114,7 +124,7 @@ import ariane_pkg::*;
         // the shadow register now contain the interrupt context
         if (dcache_req_i.data_gnt) begin
           if (cnt_q == 0) begin
-            save_state_d = IDLE;
+            save_state_d = IDLE_SAVE;
             cnt_d        = SHADOW_RELOAD;
             stack_d      = 32'b0;
           end else begin
@@ -133,7 +143,7 @@ import ariane_pkg::*;
   assign csr_rdata_o = shadow_ready_o ? shadow_reg_rdata_i : {(CVA6Cfg.XLEN/8){8'haa}};
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (!rst_ni) begin
-      save_state_q <= IDLE;
+      save_state_q <= IDLE_SAVE;
       stack_q      <= '0;
       cnt_q        <= SHADOW_RELOAD;
     end else begin
@@ -142,6 +152,55 @@ import ariane_pkg::*;
       cnt_q        <= cnt_d;
     end
   end
+
+//Load Logic
+  typedef enum logic [1:0] {
+    IDLE_LOAD, LOADING, LD_READY
+  } load_state_e;
+  load_state_e load_state_d, load_state_q;
+  logic [ADDR_WIDTH-1:0] load_cnt_d, load_cnt_q;
+
+  always_comb begin
+    shru_load_ack_o = 1'b0;
+    load_state_d = load_state_q;
+    load_cnt_d = load_cnt_q;
+    mret_ready_o = 1'b1;
+
+    unique case(load_state_q)
+    IDLE_LOAD: begin
+      load_cnt_d = SHADOW_RELOAD;
+      mret_ready_o = 1'b1;
+      if(shru_load_valid_i) begin
+        shru_load_ack_o = 1'b1;
+        load_state_d = LOADING;
+      end
+    end
+    LOADING: begin
+      load_cnt_d = load_cnt_q - 5'b1;
+      mret_ready_o = 1'b0;
+      if(load_cnt_q == 5'b0) begin
+        load_state_d = LD_READY;
+      end
+    end
+    LD_READY: begin
+      mret_ready_o = 1'b1;
+      if(mret_valid_i == 1'b1)begin
+        load_state_d = IDLE_LOAD;
+      end
+    end
+    endcase
+  end
+
+  always_ff@(posedge clk_i or negedge rst_ni) begin 
+    if(!rst_ni)begin 
+      load_state_q <= IDLE_LOAD;
+      load_cnt_q   <= SHADOW_RELOAD;
+    end else begin   
+      load_state_q <= load_state_d;
+      load_cnt_q   <= load_cnt_d;
+    end
+  end
+
     // TODO: Use CV32E40P_ASSERT_ON
 `ifndef SYNTHESIS
   a_shadow_controller_acces_while_saving: assert property (

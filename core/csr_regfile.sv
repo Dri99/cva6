@@ -186,6 +186,12 @@ module csr_regfile
     // Shadow Register read port - CSR
     output logic [4:0] shru_raddr_o,
     input  logic [CVA6Cfg.XLEN-1:0] shru_rdata_i,
+    // Request to begin an asynchronous load - ISSUE STAGE
+    output  logic shru_load_valid_o,
+    // Load request accepted - ISSUE STAGE
+    input  logic shru_load_ack_i,
+    // Register not yet loaded - ISSUE STAGE
+    input logic [4:0] shru_load_level_i,
     // TO_BE_COMPLETED - PERF_COUNTERS
     output logic [31:0] mcountinhibit_o,
     // RVFI
@@ -214,13 +220,20 @@ module csr_regfile
     logic [CVA6Cfg.PPNW-1:0]  ppn;
   } hgatp_t;
 
+  //| start_load | 0  | save_ready |     0    | load_level |     0    |  raddr  |    0   | save_level |
+  //|      26    | 25 |     24     | 23 .. 21 |  20 .. 16  | 15 .. 13 | 12 .. 8 | 7 .. 5 | 4 .. 0     |
   typedef struct packed {
+    logic start_load;
+    logic zero3;
     logic ready;
+    logic [2:0] zero2;
+    logic [4:0] load_level;
     logic [2:0] zero1;
     logic [4:0] raddr;
     logic [2:0] zero;
     logic [4:0] save_level;
   } shadow_status_t;
+
   // internal signal to keep track of access exceptions
   logic read_access_exception, update_access_exception, privilege_violation;
   logic virtual_read_access_exception, virtual_update_access_exception, virtual_privilege_violation;
@@ -308,6 +321,7 @@ module csr_regfile
   logic [CVA6Cfg.XLEN-1:0] last_saved_sp_q, last_saved_sp_d;
   shadow_status_t shadow_status;
   logic [4:0] shru_raddr_d, shru_raddr_q;
+  logic shru_load_req_d, shru_load_req_q, shru_load_req_now;
 
   localparam logic [CVA6Cfg.XLEN-1:0] IsaCode = (CVA6Cfg.XLEN'(CVA6Cfg.RVA) <<  0)                // A - Atomic Instructions extension
   | (CVA6Cfg.XLEN'(CVA6Cfg.RVB) << 1)  // B - Bitmanip extension
@@ -344,6 +358,8 @@ module csr_regfile
   assign shadow_mepc_o     = mepc_q;
   assign shadow_mcause_o   = mcause_q;
 
+  assign shadow_status.start_load = shru_load_req_q;
+  assign shadow_status.load_level = shru_load_level_i;
   assign shadow_status.save_level = shru_save_level_i;
   assign shadow_status.zero       = '0;
   assign shadow_status.raddr      = shru_raddr_q;
@@ -351,6 +367,7 @@ module csr_regfile
   assign shadow_status.zero1      = '0;
 
   assign shru_raddr_o             = shru_raddr_q;
+  assign shru_load_valid_o        = shru_load_req_q | shru_load_req_now;
   // ----------------
   // CSR Read logic
   // ----------------
@@ -926,7 +943,7 @@ module csr_regfile
     automatic satp_t vsatp;
     automatic hgatp_t hgatp;
     automatic logic [63:0] instret;
-    automatic logic ebreak_avoid_ex;
+automatic logic ebreak_avoid_ex;
     if (CVA6Cfg.RVS) begin
       satp = satp_q;
     end
@@ -935,7 +952,7 @@ module csr_regfile
       vsatp = vsatp_q;
     end
     instret         = instret_q;
-    ebreak_avoid_ex = 0;
+ebreak_avoid_ex = 0;
     mcountinhibit_d = mcountinhibit_q;
 
     // --------------------
@@ -970,6 +987,8 @@ module csr_regfile
     cyc_data_o                      = 'b0; 
     last_saved_sp_d                 = shadow_reg_save_o ? sp_n_i : last_saved_sp_q;
     shru_raddr_d                    = shru_raddr_q;
+    shru_load_req_d                 = shru_load_req_q & !shru_load_ack_i;
+    shru_load_req_now               = 1'b0;
 
     fcsr_d                          = fcsr_q;
 
@@ -1686,6 +1705,8 @@ module csr_regfile
         riscv::CSR_SHADOW_STATUS: begin
           automatic shadow_status_t casted_wdata = shadow_status_t'(csr_wdata[($bits(shadow_status))-1:0]);
           shru_raddr_d = casted_wdata.raddr;
+          if(casted_wdata.start_load == 1'b1)
+            shru_load_req_now = 1'b1;
         end
         riscv::CSR_SHADOW_REG: ;//DO nothing
         // PMP locked logic
@@ -1853,7 +1874,7 @@ module csr_regfile
     // Timer interrupt pending, coming from platform timer
     mip_d[riscv::IRQ_M_TIMER] = time_irq_i;
 
-    // ------------------------------
+ // ------------------------------
     // Debug
     // ------------------------------
     // Explains why Debug Mode was entered.
@@ -2112,7 +2133,7 @@ module csr_regfile
       end
     end
 
-    // ------------------------------
+       // ------------------------------
     // MPRV - Modify Privilege Level
     // ------------------------------
     // Set the address translation at which the load and stores should occur
@@ -2623,7 +2644,8 @@ module csr_regfile
       mcounteren_q     <= {CVA6Cfg.XLEN{1'b0}};
       mscratch_q       <= {CVA6Cfg.XLEN{1'b0}};
       last_saved_sp_q  <= {CVA6Cfg.XLEN{1'b0}};
-      shru_raddr_q     <= {CVA6Cfg.XLEN{1'b0}};
+      shru_raddr_q     <= 5'b0;
+      shru_load_req_q  <= 1'b0;
       mtval_q          <= {CVA6Cfg.XLEN{1'b0}};
       fiom_q           <= '0;
       dcache_q         <= {{CVA6Cfg.XLEN - 1{1'b0}}, 1'b1};
@@ -2706,6 +2728,7 @@ module csr_regfile
       mscratch_q       <= mscratch_d;
       last_saved_sp_q  <= last_saved_sp_d;
       shru_raddr_q     <= shru_raddr_d;
+      shru_load_req_q  <= shru_load_req_d;
       if (CVA6Cfg.TvalEn) mtval_q <= mtval_d;
       fiom_q          <= fiom_d;
       dcache_q        <= dcache_d;
