@@ -655,6 +655,7 @@ package riscv;
     CSR_LAST_SP          = 12'h7C6,
     CSR_SHADOW_STATUS    = 12'h7C7,
     CSR_SHADOW_REG       = 12'h7C8,
+    CSR_LOAD_ESF         = 12'h7C9,
     // Counters and Timers from Zicntr extension (User Mode - R/O Shadows)
     CSR_CYCLE            = 12'hC00,
     CSR_CYCLEH           = 12'hC80,

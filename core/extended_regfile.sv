@@ -65,9 +65,9 @@ module extended_regfile
     // Page offset is being saved in ShRU - EX STAGE
     output logic page_offset_matches_shru_o,
     // Data cache request ouput - CACHE
-    input  dcache_req_o_t dcache_req_i,
+    input  dcache_req_o_t [1:0] dcache_req_ports_i,
     // Data cache request input - CACHE
-    output dcache_req_i_t dcache_req_o,
+    output dcache_req_i_t [1:0] dcache_req_ports_o,
     // Request to begin an asynchronous load - CSR
     input  logic shru_load_valid_i,
     // Load request accepted - CSR
@@ -77,7 +77,9 @@ module extended_regfile
     // Request to commit an mret - COMMIT STAGE
     input logic shru_mret_commit_valid_i,
     // Mret request accepted - COMMIT STAGE
-    output logic shru_mret_commit_ready_o
+    output logic shru_mret_commit_ready_o,  
+    // Exception stack frame to load from - CSR
+    input logic [DATA_WIDTH-1:0]  shru_load_esf_i
 );
   localparam int unsigned ADDR_WIDTH = 5;
   logic [ADDR_WIDTH-1:0] shadow_raddr_sh_ctrl_rf;
@@ -129,14 +131,15 @@ module extended_regfile
       .shadow_load_level_o (shru_load_level_o),
       .mret_valid_i        (shru_mret_commit_valid_i),
       .mret_ready_o        (shru_mret_commit_ready_o),
+      .shadow_load_esf_i   (shru_load_esf_i),
       .shru_valid_o,
       .shru_fu_data_o,
       .shru_store_valid_i,
       .lsu_ready_i,
       .page_offset_i,
       .page_offset_matches_shru_o,
-      .dcache_req_i,
-      .dcache_req_o,
+      .dcache_req_ports_i,
+      .dcache_req_ports_o,
       .shru_load_valid_i,
       .shru_load_ack_o,
       .*

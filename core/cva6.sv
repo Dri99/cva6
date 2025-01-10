@@ -457,6 +457,7 @@ module cva6
   logic [4:0] shru_load_level_issue_csr;
   logic shru_mret_commit_valid_csr_issue;
   logic shru_mret_commit_ready_issue_csr;
+  logic [CVA6Cfg.XLEN-1:0] shru_load_esf_csr_issue;
 
   logic [CVA6Cfg.XLEN-1:0] store_result_ex_id;
   logic [CVA6Cfg.TRANS_ID_BITS-1:0] store_trans_id_ex_id;
@@ -644,8 +645,8 @@ module cva6
   dcache_req_o_t [2:0] dcache_req_ports_cache_ex;
   dcache_req_i_t [1:0] dcache_req_ports_acc_cache;
   dcache_req_o_t [1:0] dcache_req_ports_cache_acc;
-  dcache_req_i_t dcache_req_ports_issue_cache;
-  dcache_req_o_t dcache_req_ports_cache_issue;
+  dcache_req_i_t [1:0] dcache_req_ports_issue_cache;
+  dcache_req_o_t [1:0] dcache_req_ports_cache_issue;
   logic dcache_commit_wbuffer_empty;
   logic dcache_commit_wbuffer_not_ni;
 
@@ -875,8 +876,9 @@ module cva6
       .shru_load_level_o         (shru_load_level_issue_csr),
       .shru_mret_commit_valid_i  (shru_mret_commit_valid_csr_issue),
       .shru_mret_commit_ready_o  (shru_mret_commit_ready_issue_csr),
-      .dcache_req_i              (dcache_req_ports_cache_issue),
-      .dcache_req_o              (dcache_req_ports_issue_cache),
+      .shru_load_esf_i           (shru_load_esf_csr_issue),
+      .dcache_req_ports_i        (dcache_req_ports_cache_issue),
+      .dcache_req_ports_o        (dcache_req_ports_issue_cache),
       // Multiplier
       .mult_valid_o            (mult_valid_id_ex),
       // FPU
@@ -1220,6 +1222,7 @@ module cva6
       .shru_load_valid_o       (shru_load_valid_csr_issue),
       .shru_load_ack_i         (shru_load_ack_issue_csr),
       .shru_load_level_i       (shru_load_level_issue_csr),
+      .shru_load_esf_o         (shru_load_esf_csr_issue),
       .mcountinhibit_o         (mcountinhibit_csr_perf),
       //RVFI
       .rvfi_csr_o              (rvfi_csr),
@@ -1354,26 +1357,34 @@ module cva6
   // D$ request
   assign dcache_req_to_cache[0] = dcache_req_ports_ex_cache[0];
   assign dcache_req_to_cache[1] = dcache_req_ports_ex_cache[1];
-  assign dcache_req_to_cache[2] = dcache_req_ports_acc_cache[0];
+  assign dcache_req_to_cache[2] = dcache_req_ports_acc_cache[0].data_req ? dcache_req_ports_acc_cache[0] :
+                                                                         dcache_req_ports_issue_cache[1];
  
   always_comb begin: gen_dcache_req_store_data_req
   // Priority selection:
   // 0 - dcache_req_ports_ex_cache [2]
   // 1 - dcache_req_ports_acc_cache[1]
-  // 2 - dcache_req_ports_issue_cache
-    dcache_req_to_cache[3] = dcache_req_ports_issue_cache;
+  // 2 - dcache_req_ports_issue_cache[0]
+    dcache_req_to_cache[3] = dcache_req_ports_issue_cache[0];
     if(dcache_req_ports_acc_cache[1].data_req)  
       dcache_req_to_cache[3] = dcache_req_ports_acc_cache[1];
     if(dcache_req_ports_ex_cache [2].data_req)
       dcache_req_to_cache[3] = dcache_req_ports_ex_cache[2];
   end
-  //assign dcache_req_to_cache[3] = dcache_req_ports_ex_cache[2].data_req ? dcache_req_ports_ex_cache [2] :
-  //                                                                        dcache_req_ports_acc_cache[1];
 
   // D$ response
-  assign dcache_req_ports_cache_ex[0] = dcache_req_from_cache[0];
-  assign dcache_req_ports_cache_ex[1] = dcache_req_from_cache[1];
-  assign dcache_req_ports_cache_acc[0] = dcache_req_from_cache[2];
+  assign dcache_req_ports_cache_ex[0] =    dcache_req_from_cache[0];
+  assign dcache_req_ports_cache_ex[1] =    dcache_req_from_cache[1];
+  
+  always_comb begin : gen_dcache_req_acc_issue_data_gnt
+    dcache_req_ports_cache_acc[0] =        dcache_req_from_cache[2];
+    dcache_req_ports_cache_issue[1] =      dcache_req_from_cache[2];
+
+    dcache_req_ports_cache_acc[0].data_gnt &=    dcache_req_ports_acc_cache[0].data_req;
+    dcache_req_ports_cache_issue[1].data_gnt &= !dcache_req_ports_acc_cache[0].data_req;
+  
+  end
+
   always_comb begin : gen_dcache_req_store_data_gnt
     dcache_req_ports_cache_ex[2]  = dcache_req_from_cache[3];
     dcache_req_ports_cache_acc[1] = dcache_req_from_cache[3];
@@ -1382,9 +1393,9 @@ module cva6
     dcache_req_ports_cache_ex[2].data_gnt &= dcache_req_ports_ex_cache[2].data_req;
     dcache_req_ports_cache_acc[1].data_gnt &= !dcache_req_ports_ex_cache[2].data_req;
 
-    dcache_req_ports_cache_issue  = dcache_req_from_cache[3];
+    dcache_req_ports_cache_issue[0]  = dcache_req_from_cache[3];
 
-    dcache_req_ports_cache_issue.data_gnt  &= (!dcache_req_ports_ex_cache[2].data_req) & (!dcache_req_ports_acc_cache[1].data_req);
+    dcache_req_ports_cache_issue[0].data_gnt  &= (!dcache_req_ports_ex_cache[2].data_req) & (!dcache_req_ports_acc_cache[1].data_req);
   end
 
   if (CVA6Cfg.DCacheType == config_pkg::WT) begin : gen_cache_wt

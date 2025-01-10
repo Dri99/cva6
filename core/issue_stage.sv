@@ -107,11 +107,13 @@ module issue_stage
     // Request to commit an mret - COMMIT STAGE
     input logic shru_mret_commit_valid_i,
     // Mret request accepted - COMMIT STAGE
-    output logic shru_mret_commit_ready_o,
-    // Data cache request ouput - CACHE
-    input  dcache_req_o_t dcache_req_i,
+    output logic shru_mret_commit_ready_o, 
+    // Exception stack frame to load from - CSR
+    input logic [CVA6Cfg.XLEN-1:0]  shru_load_esf_i,
     // Data cache request input - CACHE
-    output dcache_req_i_t dcache_req_o,
+    input  dcache_req_o_t  [1:0] dcache_req_ports_i,
+    // Data cache request output - CACHE
+    output dcache_req_i_t [1:0] dcache_req_ports_o,
     // Branch unit is valid - EX_STAGE
     output logic [CVA6Cfg.NrIssuePorts-1:0] branch_valid_o,
     // Information of branch prediction - EX_STAGE
@@ -303,10 +305,11 @@ module issue_stage
       .shru_load_level_o,
       .shru_mret_commit_valid_i,
       .shru_mret_commit_ready_o,
+      .shru_load_esf_i,
       .page_offset_i,
       .page_offset_matches_shru_o,
-      .dcache_req_i,
-      .dcache_req_o,
+      .dcache_req_ports_i,
+      .dcache_req_ports_o,
       .x_issue_ready_i         (x_issue_ready_i),
       .x_issue_resp_i          (x_issue_resp_i),
       .x_issue_valid_o         (x_issue_valid_o),

@@ -106,11 +106,13 @@ module issue_read_operands
     // Request to commit an mret - COMMIT STAGE
     input logic shru_mret_commit_valid_i,
     // Mret request accepted - COMMIT STAGE
-    output logic shru_mret_commit_ready_o,
-    // Data cache request ouput - CACHE
-    input  dcache_req_o_t dcache_req_i,
+    output logic shru_mret_commit_ready_o, 
+    // Exception stack frame to load from - CSR
+    input logic [CVA6Cfg.XLEN-1:0]  shru_load_esf_i,
     // Data cache request input - CACHE
-    output dcache_req_i_t dcache_req_o,
+    input  dcache_req_o_t [1:0] dcache_req_ports_i,
+    // Data cache request output - CACHE
+    output dcache_req_i_t [1:0] dcache_req_ports_o,
     // Mult result is valid - TO_BE_COMPLETED
     output logic [CVA6Cfg.NrIssuePorts-1:0] mult_valid_o,
     // FPU is ready - TO_BE_COMPLETED
@@ -1048,25 +1050,27 @@ module issue_read_operands
         .shru_rdata_o,
         .page_offset_i,
         .page_offset_matches_shru_o,
-        .dcache_req_i,
-        .dcache_req_o,
+        .dcache_req_ports_i,
+        .dcache_req_ports_o,
         .shru_load_valid_i,
         .shru_load_ack_o,
         .shru_load_level_o,
         .shru_mret_commit_valid_i,
         .shru_mret_commit_ready_o,
+        .shru_load_esf_i,
         .*
     );
   end else if (CVA6Cfg.FpgaEn) begin : gen_fpga_regfile
-    assign shru_valid_o =               '0;
-    assign page_offset_matches_shru_o = '0;
-    assign shru_store_ready_o =         '1;
-    assign dcache_req_o.data_req =      '0;
-    assign next_sp_o =                  '0;
-    assign shru_rdata_o =               '0;
-    assign shru_load_ack_o =             1;
-    assign shru_load_level_o =          '0;
-    assign shru_mret_commit_ready_o =    1;
+    assign shru_valid_o =                   1'b0;
+    assign page_offset_matches_shru_o =     1'b0;
+    assign shru_store_ready_o =             1'b1;
+    assign dcache_req_ports_o[0].data_req = 1'b0;
+    assign dcache_req_ports_o[1].data_req = 1'b0;
+    assign shru_load_ack_o =                1'b1;
+    assign shru_mret_commit_ready_o =       1'b1;
+    assign next_sp_o =                      '0;
+    assign shru_rdata_o =                   '0;
+    assign shru_load_level_o =              '0;
     ariane_regfile_fpga #(
         .CVA6Cfg      (CVA6Cfg),
         .DATA_WIDTH   (CVA6Cfg.XLEN),

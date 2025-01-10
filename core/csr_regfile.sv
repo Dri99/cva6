@@ -192,6 +192,8 @@ module csr_regfile
     input  logic shru_load_ack_i,
     // Register not yet loaded - ISSUE STAGE
     input logic [4:0] shru_load_level_i,
+    // Exception stack frame to load from - ISSUE STAGE
+    output logic [CVA6Cfg.XLEN-1:0] shru_load_esf_o,
     // TO_BE_COMPLETED - PERF_COUNTERS
     output logic [31:0] mcountinhibit_o,
     // RVFI
@@ -319,6 +321,7 @@ module csr_regfile
   logic [63:0][CVA6Cfg.PLEN-3:0] pmpaddr_q, pmpaddr_d, pmpaddr_next;
   logic [MHPMCounterNum+3-1:0] mcountinhibit_d, mcountinhibit_q;
   logic [CVA6Cfg.XLEN-1:0] last_saved_sp_q, last_saved_sp_d;
+  logic [CVA6Cfg.XLEN-1:0] shru_load_esf_d, shru_load_esf_q;
   shadow_status_t shadow_status;
   logic [4:0] shru_raddr_d, shru_raddr_q;
   logic shru_load_req_d, shru_load_req_q, shru_load_req_now;
@@ -368,6 +371,7 @@ module csr_regfile
 
   assign shru_raddr_o             = shru_raddr_q;
   assign shru_load_valid_o        = shru_load_req_q | shru_load_req_now;
+  assign shru_load_esf_o          = shru_load_esf_q;
   // ----------------
   // CSR Read logic
   // ----------------
@@ -829,6 +833,7 @@ module csr_regfile
         riscv::CSR_LAST_SP: csr_rdata = last_saved_sp_q;
         riscv::CSR_SHADOW_STATUS: csr_rdata = {{(CVA6Cfg.XLEN - $bits(shadow_status)) {1'b0}}, shadow_status};
         riscv::CSR_SHADOW_REG: csr_rdata = shru_rdata_i;
+        riscv::CSR_LOAD_ESF: csr_rdata = shru_load_esf_q;
         // PMPs
         riscv::CSR_PMPCFG0,
                 riscv::CSR_PMPCFG1,
@@ -989,6 +994,7 @@ ebreak_avoid_ex = 0;
     shru_raddr_d                    = shru_raddr_q;
     shru_load_req_d                 = shru_load_req_q & !shru_load_ack_i;
     shru_load_req_now               = 1'b0;
+    shru_load_esf_d                 = shru_load_esf_q;
 
     fcsr_d                          = fcsr_q;
 
@@ -1709,6 +1715,7 @@ ebreak_avoid_ex = 0;
             shru_load_req_now = 1'b1;
         end
         riscv::CSR_SHADOW_REG: ;//DO nothing
+        riscv::CSR_LOAD_ESF: shru_load_esf_d = csr_wdata;
         // PMP locked logic
         // 1. refuse to update any locked entry
         // 2. also refuse to update the entry below a locked TOR entry
@@ -2646,6 +2653,7 @@ ebreak_avoid_ex = 0;
       last_saved_sp_q  <= {CVA6Cfg.XLEN{1'b0}};
       shru_raddr_q     <= 5'b0;
       shru_load_req_q  <= 1'b0;
+      shru_load_esf_q  <= {CVA6Cfg.XLEN{1'b0}};
       mtval_q          <= {CVA6Cfg.XLEN{1'b0}};
       fiom_q           <= '0;
       dcache_q         <= {{CVA6Cfg.XLEN - 1{1'b0}}, 1'b1};
@@ -2729,6 +2737,7 @@ ebreak_avoid_ex = 0;
       last_saved_sp_q  <= last_saved_sp_d;
       shru_raddr_q     <= shru_raddr_d;
       shru_load_req_q  <= shru_load_req_d;
+      shru_load_esf_q  <= shru_load_esf_d;
       if (CVA6Cfg.TvalEn) mtval_q <= mtval_d;
       fiom_q          <= fiom_d;
       dcache_q        <= dcache_d;

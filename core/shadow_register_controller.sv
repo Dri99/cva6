@@ -43,9 +43,9 @@ import ariane_pkg::*;
   // Page offset is being saved in ShRU - EX STAGE
   output logic page_offset_matches_shru_o,
   // Data cache request ouput - CACHE
-  input  dcache_req_o_t dcache_req_i,
+  input  dcache_req_o_t [1:0] dcache_req_ports_i,
   // Data cache request input - CACHE
-  output dcache_req_i_t dcache_req_o,
+  output dcache_req_i_t [1:0] dcache_req_ports_o,
   // Csr read port - 
   input  logic [ADDR_WIDTH-1:0] csr_raddr_i,
   output logic [DATA_WIDTH-1:0] csr_rdata_o,
@@ -58,11 +58,13 @@ import ariane_pkg::*;
   // Request to commit an mret - COMMIT STAGE
   input logic mret_valid_i,
   // Mret request accepted - COMMIT STAGE
-  output logic mret_ready_o
+  output logic mret_ready_o,
+  // Exception stack frame to load from - CSR
+  input logic [DATA_WIDTH-1:0]  shadow_load_esf_i
 );
   logic [ADDR_WIDTH-1:0]   cnt_q, cnt_d;
   logic [DATA_WIDTH-1:0]   stack_q, stack_d;
-  logic [CVA6Cfg.PLEN-1:0] p_addr;
+  logic [CVA6Cfg.PLEN-1:0] save_p_addr;
   localparam int unsigned SHADOW_RELOAD = NUM_SHADOW_SAVES - 1;
   typedef enum logic [1:0] {
     IDLE_SAVE, SAVE
@@ -77,23 +79,23 @@ import ariane_pkg::*;
   assign shru_fu_data_o.trans_id = 'b0; //TODO: maybe change with something useful
 
   //TODO: for now we assume that this process is always done with translation disabled
-  assign p_addr = (CVA6Cfg.PLEN)'(stack_q[((CVA6Cfg.PLEN > CVA6Cfg.VLEN) ? CVA6Cfg.VLEN -1: CVA6Cfg.PLEN -1 ):0]);
-  assign dcache_req_o.address_index = p_addr[CVA6Cfg.DCACHE_INDEX_WIDTH-1:0];    
-  assign dcache_req_o.address_tag   = p_addr[CVA6Cfg.DCACHE_TAG_WIDTH     +
+  assign save_p_addr = (CVA6Cfg.PLEN)'(stack_q[((CVA6Cfg.PLEN > CVA6Cfg.VLEN) ? CVA6Cfg.VLEN -1: CVA6Cfg.PLEN -1 ):0]);
+  assign dcache_req_ports_o[0].address_index = save_p_addr[CVA6Cfg.DCACHE_INDEX_WIDTH-1:0];    
+  assign dcache_req_ports_o[0].address_tag   = save_p_addr[CVA6Cfg.DCACHE_TAG_WIDTH     +
                                               CVA6Cfg.DCACHE_INDEX_WIDTH-1 :
                                               CVA6Cfg.DCACHE_INDEX_WIDTH];
-  assign dcache_req_o.data_wdata    = shadow_reg_rdata_i;     
-  assign dcache_req_o.data_wuser    = '0;
-  assign dcache_req_o.data_we       = '1;
-  assign dcache_req_o.data_size     = extract_transfer_size(CVA6Cfg.XLEN == 32? SW : SD);
-  assign dcache_req_o.data_id       = '0; 
-  assign dcache_req_o.kill_req      = '0;   
-  assign dcache_req_o.tag_valid     = '0;   
+  assign dcache_req_ports_o[0].data_wdata    = shadow_reg_rdata_i;     
+  assign dcache_req_ports_o[0].data_wuser    = '0;
+  assign dcache_req_ports_o[0].data_we       = '1;
+  assign dcache_req_ports_o[0].data_size     = extract_transfer_size(CVA6Cfg.XLEN == 32? SW : SD);
+  assign dcache_req_ports_o[0].data_id       = '0; 
+  assign dcache_req_ports_o[0].kill_req      = '0;   
+  assign dcache_req_ports_o[0].tag_valid     = '0;   
   
   if (CVA6Cfg.IS_XLEN64) begin : gen_8b_be
-    assign dcache_req_o.data_be     = be_gen(stack_q[2:0], extract_transfer_size(SD));
+    assign dcache_req_ports_o[0].data_be     = be_gen(stack_q[2:0], extract_transfer_size(SD));
   end else begin : gen_4b_be
-    assign dcache_req_o.data_be     = be_gen_32(stack_q[1:0], extract_transfer_size(SW));
+    assign dcache_req_ports_o[0].data_be     = be_gen_32(stack_q[1:0], extract_transfer_size(SW));
   end
    
   //TODO: add SVA to check that we only save in Machine mode
@@ -106,7 +108,7 @@ import ariane_pkg::*;
     shru_valid_o = 1'b0;
     shadow_ready_o = 1'b1;
     page_offset_matches_shru_o = '0;
-    dcache_req_o.data_req = '0;
+    dcache_req_ports_o[0].data_req = '0;
     unique case (save_state_q)
       IDLE_SAVE: begin
         cnt_d = SHADOW_RELOAD;
@@ -119,10 +121,10 @@ import ariane_pkg::*;
       SAVE: begin
         // write reg to stack
         //shru_valid_o = lsu_ready_i;
-        dcache_req_o.data_req = '1;
+        dcache_req_ports_o[0].data_req = '1;
         shadow_ready_o = 1'b0;
         // the shadow register now contain the interrupt context
-        if (dcache_req_i.data_gnt) begin
+        if (dcache_req_ports_i[0].data_gnt) begin
           if (cnt_q == 0) begin
             save_state_d = IDLE_SAVE;
             cnt_d        = SHADOW_RELOAD;
@@ -153,12 +155,42 @@ import ariane_pkg::*;
     end
   end
 
-//Load Logic
+///////////////////////////////////////////////////////////////////////////
+//                           Load Logic                                  //
+///////////////////////////////////////////////////////////////////////////
+
   typedef enum logic [1:0] {
     IDLE_LOAD, LOADING, LD_READY
   } load_state_e;
   load_state_e load_state_d, load_state_q;
   logic [ADDR_WIDTH-1:0] load_cnt_d, load_cnt_q;
+  logic [CVA6Cfg.PLEN-1:0] load_p_addr;
+  logic [DATA_WIDTH-1:0] load_address;
+  logic [DATA_WIDTH-1:0] load_value;
+
+  //TODO: for now we assume that this process is always done with translation disabled
+  //TODO: We will have to understant what to do when user mode will be enabled
+  assign load_p_addr = (CVA6Cfg.PLEN)'(load_address[((CVA6Cfg.PLEN > CVA6Cfg.VLEN) ? CVA6Cfg.VLEN -1: CVA6Cfg.PLEN -1 ):0]);
+  assign dcache_req_ports_o[1].address_index = load_p_addr[CVA6Cfg.DCACHE_INDEX_WIDTH-1:0];    
+  assign dcache_req_ports_o[1].address_tag   = load_p_addr[CVA6Cfg.DCACHE_TAG_WIDTH     +
+                                              CVA6Cfg.DCACHE_INDEX_WIDTH-1 :
+                                              CVA6Cfg.DCACHE_INDEX_WIDTH];
+  assign dcache_req_ports_o[1].data_wdata    = '0;     
+  assign dcache_req_ports_o[1].data_wuser    = '0;
+  assign dcache_req_ports_o[1].data_we       = '0;
+  assign dcache_req_ports_o[1].data_size     = extract_transfer_size(CVA6Cfg.XLEN == 32? SW : SD);
+  assign dcache_req_ports_o[1].data_id       = '0; //For now we send one request at a time
+  assign dcache_req_ports_o[1].kill_req      = '0; //For now a loading cannot be interrupted and doesn't generate exceptions
+  assign dcache_req_ports_o[1].tag_valid     = '1; //Skips mmu as we work in machine mode only
+  
+  if (CVA6Cfg.IS_XLEN64) begin : gen_8b_be
+    assign dcache_req_ports_o[1].data_be     = be_gen(load_address[2:0], extract_transfer_size(SD));
+  end else begin : gen_4b_be
+    assign dcache_req_ports_o[1].data_be     = be_gen_32(load_address[1:0], extract_transfer_size(SW));
+  end
+
+  assign load_address = (DATA_WIDTH)'(load_cnt_q) + shadow_load_esf_i;
+  assign load_value = dcache_req_ports_i[1].data_rdata;
 
   always_comb begin
     shru_load_ack_o = 1'b0;
@@ -176,7 +208,12 @@ import ariane_pkg::*;
       end
     end
     LOADING: begin
-      load_cnt_d = load_cnt_q - 5'b1;
+      dcache_req_ports_o[1].data_req = '1;
+
+      if(dcache_req_ports_i[1].data_rvalid) begin
+        load_cnt_d = load_cnt_q - 5'b1;
+
+      end
       mret_ready_o = 1'b0;
       if(load_cnt_q == 5'b0) begin
         load_state_d = LD_READY;
