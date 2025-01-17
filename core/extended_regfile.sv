@@ -85,6 +85,16 @@ module extended_regfile
   logic [ADDR_WIDTH-1:0] shadow_raddr_sh_ctrl_rf;
   logic [DATA_WIDTH-1:0] shadow_rdata_rf_sh_ctrl;
   logic [DATA_WIDTH-1:0] shadow_sp_rf_sh_ctrl;
+
+
+  logic                  shadow_load_sh_ctrl_rf;
+  logic                  shadow_we_sh_ctrl_rf;
+  logic [ADDR_WIDTH-1:0] shadow_waddr_sh_ctrl_rf;
+  logic [DATA_WIDTH-1:0] shadow_wdata_sh_ctrl_rf;
+  
+  
+  
+  
 //TODO: To understand if another signal is better to drive shadow_csr_save,  and 
 
   ariane_regfile #(
@@ -95,10 +105,14 @@ module extended_regfile
       .ZERO_REG_ZERO(1)
   ) i_ariane_regfile_ff (
       .shadow_csr_save_i(shadow_reg_save_i),
-      .shadow_save_i  (shadow_reg_save_i),
-      .shadow_raddr_i (shadow_raddr_sh_ctrl_rf),
-      .shadow_rdata_o (shadow_rdata_rf_sh_ctrl),
-      .shadow_sp_o    (shadow_sp_rf_sh_ctrl),
+      .shadow_save_i    (shadow_reg_save_i),
+      .shadow_raddr_i   (shadow_raddr_sh_ctrl_rf),
+      .shadow_rdata_o   (shadow_rdata_rf_sh_ctrl),
+      .shadow_sp_o      (shadow_sp_rf_sh_ctrl),
+      .shadow_load_i    (shadow_load_sh_ctrl_rf),
+      .shadow_waddr_i   (shadow_waddr_sh_ctrl_rf),
+      .shadow_wdata_i   (shadow_wdata_sh_ctrl_rf),
+      .shadow_we_i      (shadow_we_sh_ctrl_rf),
       .test_en_i,
       .raddr_i,
       .rdata_o,
@@ -126,6 +140,10 @@ module extended_regfile
       .shadow_reg_raddr_o  (shadow_raddr_sh_ctrl_rf),
       .shadow_reg_rdata_i  (shadow_rdata_rf_sh_ctrl),
       .shadow_reg_sp_i     (shadow_sp_rf_sh_ctrl),
+      .shadow_load_o       (shadow_load_sh_ctrl_rf),
+      .shadow_waddr_o      (shadow_waddr_sh_ctrl_rf),
+      .shadow_wdata_o      (shadow_wdata_sh_ctrl_rf),
+      .shadow_we_o         (shadow_we_sh_ctrl_rf),
       .csr_raddr_i         (shru_raddr_i),
       .csr_rdata_o         (shru_rdata_o),
       .shadow_load_level_o (shru_load_level_o),

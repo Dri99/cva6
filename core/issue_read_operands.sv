@@ -1113,6 +1113,10 @@ module issue_read_operands
         .shadow_raddr_i     ('b0),
         .shadow_rdata_o     (shru_rdata_o),
         .shadow_sp_o        (_shadow_sp_o),
+        .shadow_load_i      (1'b0),
+        .shadow_waddr_i     ('0),
+        .shadow_wdata_i     ('0),
+        .shadow_we_i        (1'b0),
         .*
     );
   end
@@ -1183,6 +1187,10 @@ module issue_read_operands
             .shadow_raddr_i     ('b0),
             .shadow_rdata_o     (_shadow_rdata_o),
             .shadow_sp_o        (_shadow_sp_o),
+            .shadow_load_i      (1'b0),
+            .shadow_waddr_i     ('0),
+            .shadow_wdata_i     ('0),
+            .shadow_we_i        (1'b0),
             .*
         );
       end

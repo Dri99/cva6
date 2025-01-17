@@ -30,6 +30,12 @@ import ariane_pkg::*;
   output logic [ADDR_WIDTH-1:0] shadow_reg_raddr_o,
   input logic [DATA_WIDTH-1:0]  shadow_reg_rdata_i,
   input logic [DATA_WIDTH-1:0]  shadow_reg_sp_i,
+  // Trigger transfer from shadow to arch reg
+  output  logic                 shadow_load_o,
+  // shadow registers - write port
+  output logic [ADDR_WIDTH-1:0] shadow_waddr_o,
+  output logic [DATA_WIDTH-1:0] shadow_wdata_o,
+  output logic shadow_we_o,
   // FU data from SHReg Unit is valid - EX STAGE 
   output logic shru_valid_o,
   // FU data for storing shadow regs - EX STAGE
@@ -90,7 +96,7 @@ import ariane_pkg::*;
   assign dcache_req_ports_o[0].data_size     = extract_transfer_size(CVA6Cfg.XLEN == 32? SW : SD);
   assign dcache_req_ports_o[0].data_id       = '0; 
   assign dcache_req_ports_o[0].kill_req      = '0;   
-  assign dcache_req_ports_o[0].tag_valid     = '0;   
+  assign dcache_req_ports_o[0].tag_valid     = '1;   
   
   if (CVA6Cfg.IS_XLEN64) begin : gen_8b_be
     assign dcache_req_ports_o[0].data_be     = be_gen(stack_q[2:0], extract_transfer_size(SD));
@@ -98,9 +104,9 @@ import ariane_pkg::*;
     assign dcache_req_ports_o[0].data_be     = be_gen_32(stack_q[1:0], extract_transfer_size(SW));
   end
    
+  logic [DATA_WIDTH-1:0]stack_bottom = stack_q - cnt_q * (CVA6Cfg.XLEN/8);
   //TODO: add SVA to check that we only save in Machine mode
   always_comb begin
-    logic [DATA_WIDTH-1:0]stack_bottom = stack_q - cnt_q * (CVA6Cfg.XLEN/8);
     save_state_d = save_state_q;
     cnt_d = cnt_q;
     stack_d = stack_q;
@@ -159,29 +165,49 @@ import ariane_pkg::*;
 //                           Load Logic                                  //
 ///////////////////////////////////////////////////////////////////////////
 
+  localparam LD_BUF_WIDTH = 2**CVA6Cfg.DcacheIdWidth;
   typedef enum logic [1:0] {
     IDLE_LOAD, LOADING, LD_READY
   } load_state_e;
+
+  // typedef struct packed {
+  //   logic valid;
+  //   logic [ADDR_WIDTH-1:0] cnt_value;
+  // } ld_buf_t;
+
+  // ld_buf_t [LD_BUF_WIDTH-1:0] ld_buf_q, ld_buf_d;
+  // logic ld_buf_w_index;
+
   load_state_e load_state_d, load_state_q;
-  logic [ADDR_WIDTH-1:0] load_cnt_d, load_cnt_q;
+  logic tag_valid, tag_valid_next;
+  logic [CVA6Cfg.DCACHE_TAG_WIDTH-1:0] address_tag_n, address_tag;
+  logic [ADDR_WIDTH-1:0] load_req_cnt_d, load_req_cnt_q, load_resp_cnt_d, load_resp_cnt_q;
   logic [CVA6Cfg.PLEN-1:0] load_p_addr;
   logic [DATA_WIDTH-1:0] load_address;
   logic [DATA_WIDTH-1:0] load_value;
+  logic req_end_d, req_end_q;
+  logic loading_while_saving;
 
   //TODO: for now we assume that this process is always done with translation disabled
-  //TODO: We will have to understant what to do when user mode will be enabled
+  //TODO: We will have to understand what to do when user mode will be enabled
+  assign shadow_load_level_o = load_resp_cnt_q;
   assign load_p_addr = (CVA6Cfg.PLEN)'(load_address[((CVA6Cfg.PLEN > CVA6Cfg.VLEN) ? CVA6Cfg.VLEN -1: CVA6Cfg.PLEN -1 ):0]);
+  assign load_address  = (DATA_WIDTH)'(load_req_cnt_q * (CVA6Cfg.XLEN/8)) + shadow_load_esf_i;
+  assign address_tag_n = load_p_addr[CVA6Cfg.DCACHE_TAG_WIDTH + CVA6Cfg.DCACHE_INDEX_WIDTH-1 : CVA6Cfg.DCACHE_INDEX_WIDTH];
+  assign loading_while_saving = save_state_q == SAVE && (cnt_q >= load_req_cnt_q && load_req_cnt_q >= '0);
+
+  assign shadow_waddr_o = load_resp_cnt_q;
+  assign shadow_wdata_o = dcache_req_ports_i[1].data_rdata; 
+  
   assign dcache_req_ports_o[1].address_index = load_p_addr[CVA6Cfg.DCACHE_INDEX_WIDTH-1:0];    
-  assign dcache_req_ports_o[1].address_tag   = load_p_addr[CVA6Cfg.DCACHE_TAG_WIDTH     +
-                                              CVA6Cfg.DCACHE_INDEX_WIDTH-1 :
-                                              CVA6Cfg.DCACHE_INDEX_WIDTH];
+  assign dcache_req_ports_o[1].address_tag   = address_tag;
   assign dcache_req_ports_o[1].data_wdata    = '0;     
   assign dcache_req_ports_o[1].data_wuser    = '0;
   assign dcache_req_ports_o[1].data_we       = '0;
   assign dcache_req_ports_o[1].data_size     = extract_transfer_size(CVA6Cfg.XLEN == 32? SW : SD);
-  assign dcache_req_ports_o[1].data_id       = '0; //For now we send one request at a time
+  assign dcache_req_ports_o[1].data_id       = load_req_cnt_q[0]; //For now we send one request at a time
   assign dcache_req_ports_o[1].kill_req      = '0; //For now a loading cannot be interrupted and doesn't generate exceptions
-  assign dcache_req_ports_o[1].tag_valid     = '1; //Skips mmu as we work in machine mode only
+  assign dcache_req_ports_o[1].tag_valid     = tag_valid; //Skips mmu as we work in machine mode only
   
   if (CVA6Cfg.IS_XLEN64) begin : gen_8b_be
     assign dcache_req_ports_o[1].data_be     = be_gen(load_address[2:0], extract_transfer_size(SD));
@@ -189,52 +215,94 @@ import ariane_pkg::*;
     assign dcache_req_ports_o[1].data_be     = be_gen_32(load_address[1:0], extract_transfer_size(SW));
   end
 
-  assign load_address = (DATA_WIDTH)'(load_cnt_q) + shadow_load_esf_i;
-  assign load_value = dcache_req_ports_i[1].data_rdata;
 
   always_comb begin
     shru_load_ack_o = 1'b0;
     load_state_d = load_state_q;
-    load_cnt_d = load_cnt_q;
+    load_resp_cnt_d = load_resp_cnt_q;
+    load_req_cnt_d = load_req_cnt_q;
     mret_ready_o = 1'b1;
+    dcache_req_ports_o[1].data_req = 1'b0;
+    tag_valid_next = 1'b0;
+    req_end_d = req_end_q;
+    shadow_we_o = 1'b0;
+    shadow_load_o = 1'b0;
 
     unique case(load_state_q)
     IDLE_LOAD: begin
-      load_cnt_d = SHADOW_RELOAD;
-      mret_ready_o = 1'b1;
+      load_req_cnt_d = SHADOW_RELOAD;
+      load_resp_cnt_d = SHADOW_RELOAD;
+      req_end_d = 1'b0;
       if(shru_load_valid_i) begin
         shru_load_ack_o = 1'b1;
         load_state_d = LOADING;
       end
     end
     LOADING: begin
-      dcache_req_ports_o[1].data_req = '1;
+      dcache_req_ports_o[1].data_req = ~req_end_q & ~loading_while_saving;
+      mret_ready_o = 1'b0;
+
+      if(dcache_req_ports_i[1].data_gnt) begin
+        //TODO: to better understand req/resp relationship
+          tag_valid_next = 1'b1;
+          if(load_req_cnt_q == '0) begin
+            req_end_d = 1'b1;
+          end else begin
+            load_req_cnt_d = load_req_cnt_q - 5'b1;
+            //dcache_req_ports_o[1].data_req = '1; //TODO:only if cnt!=0
+          end
+      end
 
       if(dcache_req_ports_i[1].data_rvalid) begin
-        load_cnt_d = load_cnt_q - 5'b1;
+        load_resp_cnt_d = load_resp_cnt_q - 5'b1;
+        shadow_we_o = 1'b1;
 
-      end
-      mret_ready_o = 1'b0;
-      if(load_cnt_q == 5'b0) begin
-        load_state_d = LD_READY;
+        if(load_resp_cnt_q == 5'b0) begin
+          load_state_d = LD_READY;
+        end
       end
     end
     LD_READY: begin
       mret_ready_o = 1'b1;
       if(mret_valid_i == 1'b1)begin
         load_state_d = IDLE_LOAD;
+        shadow_load_o = 1'b1;
       end
+      // if(load_resp_cnt_q == '0) begin
+      //   if(mret_valid_i == 1'b1)begin
+      //     load_state_d = IDLE_LOAD;
+      //   end
+      // end
     end
     endcase
   end
 
+  // always_comb begin
+  //   load_resp_cnt_d = load_resp_cnt_q;
+  //   if(load_state_q == IDLE_LOAD) begin
+      
+  //   end
+
+  //   if(dcache_req_ports_i[1].data_rvalid && load_req_cnt_q <= load_resp_cnt_q) begin
+  //     if(load_resp_cnt_q != 5'b0) begin
+  //       load_resp_cnt_d = load_resp_cnt_q - 5'b1;
+  //     end
+  //   end
+  // end
+
   always_ff@(posedge clk_i or negedge rst_ni) begin 
     if(!rst_ni)begin 
       load_state_q <= IDLE_LOAD;
-      load_cnt_q   <= SHADOW_RELOAD;
+      load_req_cnt_q   <= SHADOW_RELOAD;
+      load_resp_cnt_q   <= SHADOW_RELOAD;
+      tag_valid         <= 0'b0;
+      address_tag       <= '0;
     end else begin   
       load_state_q <= load_state_d;
-      load_cnt_q   <= load_cnt_d;
+      load_req_cnt_q    <= load_req_cnt_d;
+      load_resp_cnt_q   <= load_resp_cnt_d;
+      tag_valid         <= tag_valid_next;
+      address_tag       <= address_tag_n;
     end
   end
 

@@ -51,7 +51,14 @@ module ariane_regfile #(
     input  logic [ADDR_WIDTH-1:0] shadow_raddr_i,
     output logic [DATA_WIDTH-1:0] shadow_rdata_o,
     output logic [DATA_WIDTH-1:0] shadow_sp_o,
-    output logic [DATA_WIDTH-1:0] next_sp_o
+    output logic [DATA_WIDTH-1:0] next_sp_o,
+    // Trigger transfer from shadow to arch reg
+    input  logic                  shadow_load_i,
+    // shadow registers - write port
+    input logic [ADDR_WIDTH-1:0] shadow_waddr_i,
+    input logic [DATA_WIDTH-1:0] shadow_wdata_i,
+    input logic shadow_we_i
+
 );
 
   localparam NUM_WORDS = 2 ** ADDR_WIDTH;
@@ -65,6 +72,7 @@ module ariane_regfile #(
   // shadow csrs
   logic [DATA_WIDTH-1:0]             shadow_mepc;
   logic [DATA_WIDTH-1:0]             shadow_mcause;
+  logic [NUM_WORDS_SHADOW-1:0]       shadow_we_dec; 
   assign next_sp_o = shadow_save_i ? (mem[2] - (NUM_WORDS_SHADOW * (CVA6Cfg.XLEN / 8))) : mem[2];
 
   always_comb begin : we_decoder
@@ -76,6 +84,14 @@ module ariane_regfile #(
     end
   end
 
+  always_comb begin : shadow_we_decoder
+    for (int unsigned i = 0; i < NUM_WORDS_SHADOW; i++) begin
+      if (shadow_waddr_i == i) shadow_we_dec[i] = shadow_we_i;
+      else shadow_we_dec[i] = 1'b0;
+    end
+  end
+  //TODO:Add mechanism to block MRET if we are stil writing to a register that is going to be clobbered
+  //         ^--- It might be useless, though
   // loop from 1 to NUM_WORDS-1 as R0 is nil
   always_ff @(posedge clk_i, negedge rst_ni) begin : register_write_behavioral
     if (~rst_ni) begin
@@ -83,7 +99,9 @@ module ariane_regfile #(
     end else begin
       for (int unsigned j = 0; j < CVA6Cfg.NrCommitPorts; j++) begin
         for (int unsigned i = 0; i < NUM_WORDS; i++) begin
-          if (i == 2 && shadow_save_i) begin
+          if (i == 2 && shadow_load_i) begin 
+            mem[i] <= mem[i] + (NUM_WORDS_SHADOW * (CVA6Cfg.XLEN / 8));
+          end else if (i == 2 && shadow_save_i) begin
             // shadow register save bumps the stack pointer too
             // TODO: if a write happens to sp at the same time as a
             // shadow_save_i request, we might lose the write..
@@ -96,6 +114,25 @@ module ariane_regfile #(
           mem[0] <= '0;
         end
       end
+      //Writing it after, it ignores any other precedent assignment
+      if(shadow_load_i)begin
+        mem[1] <=  mem_shadow[0];  //ra
+        mem[5] <=  mem_shadow[1];  //t0
+        mem[6] <=  mem_shadow[2];  //t1
+        mem[7] <=  mem_shadow[3];  //t2
+        mem[10] <= mem_shadow[4];  //a0
+        mem[11] <= mem_shadow[5];  //a1
+        mem[12] <= mem_shadow[6];  //a2
+        mem[13] <= mem_shadow[7];  //a3
+        mem[14] <= mem_shadow[8];  //a4
+        mem[15] <= mem_shadow[9];  //a5
+        mem[16] <= mem_shadow[10]; //a6
+        mem[17] <= mem_shadow[11]; //a7
+        mem[28] <= mem_shadow[12]; //t3
+        mem[29] <= mem_shadow[13]; //t4
+        mem[30] <= mem_shadow[14]; //t5
+        mem[31] <= mem_shadow[15]; //t6
+      end
     end
   end
 
@@ -105,7 +142,7 @@ module ariane_regfile #(
 
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if(~rst_ni) begin
-      mem_shadow <= '0;
+      mem_shadow <= '{default: '0};
     end else begin
       if (shadow_save_i) begin
           mem_shadow[0] <= mem[1];   //ra
@@ -124,6 +161,12 @@ module ariane_regfile #(
           mem_shadow[13] <= mem[29]; //t4
           mem_shadow[14] <= mem[30]; //t5
           mem_shadow[15] <= mem[31]; //t6
+      end else begin
+        for (int unsigned i = 0; i < NUM_WORDS_SHADOW; i++) begin
+          if (shadow_we_dec[i]) begin
+            mem_shadow[i] <= shadow_wdata_i;
+          end
+        end
       end 
     end
   end
