@@ -225,6 +225,8 @@ module csr_regfile
   //| start_load | 0  | save_ready |     0    | load_level |     0    |  raddr  |    0   | save_level |
   //|      26    | 25 |     24     | 23 .. 21 |  20 .. 16  | 15 .. 13 | 12 .. 8 | 7 .. 5 | 4 .. 0     |
   typedef struct packed {
+    logic en_reg_save;
+    logic zero4;
     logic start_load;
     logic zero3;
     logic ready;
@@ -320,6 +322,7 @@ module csr_regfile
   riscv::pmpcfg_t [63:0] pmpcfg_q, pmpcfg_d, pmpcfg_next;
   logic [63:0][CVA6Cfg.PLEN-3:0] pmpaddr_q, pmpaddr_d, pmpaddr_next;
   logic [MHPMCounterNum+3-1:0] mcountinhibit_d, mcountinhibit_q;
+  logic shru_en_reg_save_q, shru_en_reg_save_d;
   logic [CVA6Cfg.XLEN-1:0] last_saved_sp_q, last_saved_sp_d;
   logic [CVA6Cfg.XLEN-1:0] shru_load_esf_d, shru_load_esf_q;
   shadow_status_t shadow_status;
@@ -356,7 +359,7 @@ module csr_regfile
   assign vfs_o = (CVA6Cfg.RVH) ? vsstatus_q.fs : riscv::Off;
   assign vs_o = mstatus_q.vs;
 
-  assign shadow_reg_save_o = ex_i.valid & !debug_mode_d;
+  assign shadow_reg_save_o = shru_en_reg_save_q & ex_i.valid & !debug_mode_d;
   //assign shadow_reg_save_o = ex_i.valid && (ex_i.cause != riscv::BREAKPOINT) &&  (ex_i.cause!= riscv::DEBUG_REQUEST);
   assign shadow_mepc_o     = mepc_q;
   assign shadow_mcause_o   = mcause_q;
@@ -367,7 +370,12 @@ module csr_regfile
   assign shadow_status.zero       = '0;
   assign shadow_status.raddr      = shru_raddr_q;
   assign shadow_status.ready      = shru_store_ready_i;
+  assign shadow_status.en_reg_save= shru_en_reg_save_q;
   assign shadow_status.zero1      = '0;
+  assign shadow_status.zero2      = '0;
+  assign shadow_status.zero3      = '0;
+  assign shadow_status.zero4      = '0;
+  
 
   assign shru_raddr_o             = shru_raddr_q;
   assign shru_load_valid_o        = shru_load_req_q | shru_load_req_now;
@@ -995,6 +1003,7 @@ ebreak_avoid_ex = 0;
     shru_load_req_d                 = shru_load_req_q & !shru_load_ack_i;
     shru_load_req_now               = 1'b0;
     shru_load_esf_d                 = shru_load_esf_q;
+    shru_en_reg_save_d              = shru_en_reg_save_q;
 
     fcsr_d                          = fcsr_q;
 
@@ -1710,7 +1719,8 @@ ebreak_avoid_ex = 0;
         riscv::CSR_LAST_SP: last_saved_sp_d = csr_wdata;
         riscv::CSR_SHADOW_STATUS: begin
           automatic shadow_status_t casted_wdata = shadow_status_t'(csr_wdata[($bits(shadow_status))-1:0]);
-          shru_raddr_d = casted_wdata.raddr;
+          shru_raddr_d =       casted_wdata.raddr;
+          shru_en_reg_save_d = casted_wdata.en_reg_save;
           if(casted_wdata.start_load == 1'b1)
             shru_load_req_now = 1'b1;
         end
@@ -2642,24 +2652,25 @@ ebreak_avoid_ex = 0;
       // machine mode registers
       mstatus_q        <= 64'b0;
       // set to boot address + direct mode + 4 byte offset which is the initial trap
-      mtvec_rst_load_q <= 1'b1;
-      mtvec_q          <= '0;
-      mip_q            <= {CVA6Cfg.XLEN{1'b0}};
-      mie_q            <= {CVA6Cfg.XLEN{1'b0}};
-      mepc_q           <= {CVA6Cfg.XLEN{1'b0}};
-      mcause_q         <= {CVA6Cfg.XLEN{1'b0}};
-      mcounteren_q     <= {CVA6Cfg.XLEN{1'b0}};
-      mscratch_q       <= {CVA6Cfg.XLEN{1'b0}};
-      last_saved_sp_q  <= {CVA6Cfg.XLEN{1'b0}};
-      shru_raddr_q     <= 5'b0;
-      shru_load_req_q  <= 1'b0;
-      shru_load_esf_q  <= {CVA6Cfg.XLEN{1'b0}};
-      mtval_q          <= {CVA6Cfg.XLEN{1'b0}};
-      fiom_q           <= '0;
-      dcache_q         <= {{CVA6Cfg.XLEN - 1{1'b0}}, 1'b1};
-      icache_q         <= {{CVA6Cfg.XLEN - 1{1'b0}}, 1'b1};
-      mcountinhibit_q  <= '0;
-      acc_cons_q       <= {{CVA6Cfg.XLEN - 1{1'b0}}, CVA6Cfg.EnableAccelerator};
+      mtvec_rst_load_q  <= 1'b1;
+      mtvec_q           <= '0;
+      mip_q             <= {CVA6Cfg.XLEN{1'b0}};
+      mie_q             <= {CVA6Cfg.XLEN{1'b0}};
+      mepc_q            <= {CVA6Cfg.XLEN{1'b0}};
+      mcause_q          <= {CVA6Cfg.XLEN{1'b0}};
+      mcounteren_q      <= {CVA6Cfg.XLEN{1'b0}};
+      mscratch_q        <= {CVA6Cfg.XLEN{1'b0}};
+      last_saved_sp_q   <= {CVA6Cfg.XLEN{1'b0}};
+      shru_raddr_q      <= 5'b0;
+      shru_load_req_q   <= 1'b0;
+      shru_load_esf_q   <= {CVA6Cfg.XLEN{1'b0}};
+      shru_en_reg_save_q<= 1'b0;
+      mtval_q           <= {CVA6Cfg.XLEN{1'b0}};
+      fiom_q            <= '0;
+      dcache_q          <= {{CVA6Cfg.XLEN - 1{1'b0}}, 1'b1};
+      icache_q          <= {{CVA6Cfg.XLEN - 1{1'b0}}, 1'b1};
+      mcountinhibit_q   <= '0;
+      acc_cons_q        <= {{CVA6Cfg.XLEN - 1{1'b0}}, CVA6Cfg.EnableAccelerator};
       // supervisor mode registers
       if (CVA6Cfg.RVS) begin
         medeleg_q    <= {CVA6Cfg.XLEN{1'b0}};
@@ -2725,25 +2736,26 @@ ebreak_avoid_ex = 0;
         dscratch1_q  <= dscratch1_d;
       end
       // machine mode registers
-      mstatus_q        <= mstatus_d;
-      mtvec_rst_load_q <= 1'b0;
-      mtvec_q          <= mtvec_d;
-      mip_q            <= mip_d;
-      mie_q            <= mie_d;
-      mepc_q           <= mepc_d;
-      mcause_q         <= mcause_d;
-      mcounteren_q     <= mcounteren_d;
-      mscratch_q       <= mscratch_d;
-      last_saved_sp_q  <= last_saved_sp_d;
-      shru_raddr_q     <= shru_raddr_d;
-      shru_load_req_q  <= shru_load_req_d;
-      shru_load_esf_q  <= shru_load_esf_d;
+      mstatus_q         <= mstatus_d;
+      mtvec_rst_load_q  <= 1'b0;
+      mtvec_q           <= mtvec_d;
+      mip_q             <= mip_d;
+      mie_q             <= mie_d;
+      mepc_q            <= mepc_d;
+      mcause_q          <= mcause_d;
+      mcounteren_q      <= mcounteren_d;
+      mscratch_q        <= mscratch_d;
+      last_saved_sp_q   <= last_saved_sp_d;
+      shru_raddr_q      <= shru_raddr_d;
+      shru_load_req_q   <= shru_load_req_d;
+      shru_load_esf_q   <= shru_load_esf_d;
+      shru_en_reg_save_q<= shru_en_reg_save_d;
       if (CVA6Cfg.TvalEn) mtval_q <= mtval_d;
-      fiom_q          <= fiom_d;
-      dcache_q        <= dcache_d;
-      icache_q        <= icache_d;
-      mcountinhibit_q <= mcountinhibit_d;
-      acc_cons_q      <= acc_cons_d;
+      fiom_q            <= fiom_d;
+      dcache_q          <= dcache_d;
+      icache_q          <= icache_d;
+      mcountinhibit_q   <= mcountinhibit_d;
+      acc_cons_q        <= acc_cons_d;
       // supervisor mode registers
       if (CVA6Cfg.RVS) begin
         medeleg_q    <= medeleg_d;
