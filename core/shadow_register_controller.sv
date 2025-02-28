@@ -36,14 +36,6 @@ import ariane_pkg::*;
   output logic [ADDR_WIDTH-1:0] shadow_waddr_o,
   output logic [DATA_WIDTH-1:0] shadow_wdata_o,
   output logic shadow_we_o,
-  // FU data from SHReg Unit is valid - EX STAGE 
-  output logic shru_valid_o,
-  // FU data for storing shadow regs - EX STAGE
-  output fu_data_t shru_fu_data_o,
-  // Store of shadow register is valid - EX STAGE
-  input logic shru_store_valid_i,
-  // LSU can accept a new instruction
-  input logic lsu_ready_i,
   // Page offset Load unit wants to load - EX STAGE
   input logic [11:0] page_offset_i,
   // Page offset is being saved in ShRU - EX STAGE
@@ -77,12 +69,6 @@ import ariane_pkg::*;
   } save_state_e;
   save_state_e save_state_d, save_state_q;
 
-  assign shru_fu_data_o.fu = STORE;
-  assign shru_fu_data_o.operation = SHSR;
-  assign shru_fu_data_o.operand_a= stack_q; // TODO: or stack_q
-  assign shru_fu_data_o.operand_b= shadow_reg_rdata_i;
-  assign shru_fu_data_o.imm      = 'b0;
-  assign shru_fu_data_o.trans_id = 'b0; //TODO: maybe change with something useful
 
   //TODO: for now we assume that this process is always done with translation disabled
   assign save_p_addr = (CVA6Cfg.PLEN)'(stack_q[((CVA6Cfg.PLEN > CVA6Cfg.VLEN) ? CVA6Cfg.VLEN -1: CVA6Cfg.PLEN -1 ):0]);
@@ -111,7 +97,6 @@ import ariane_pkg::*;
     cnt_d = cnt_q;
     stack_d = stack_q;
 
-    shru_valid_o = 1'b0;
     shadow_ready_o = 1'b1;
     page_offset_matches_shru_o = '0;
     dcache_req_ports_o[0].data_req = '0;
@@ -126,7 +111,6 @@ import ariane_pkg::*;
       end
       SAVE: begin
         // write reg to stack
-        //shru_valid_o = lsu_ready_i;
         dcache_req_ports_o[0].data_req = '1;
         shadow_ready_o = 1'b0;
         // the shadow register now contain the interrupt context

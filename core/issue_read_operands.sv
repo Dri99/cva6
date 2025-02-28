@@ -80,12 +80,6 @@ module issue_read_operands
     // CSR values to shadow - CSR Regfile
     input logic [CVA6Cfg.XLEN-1:0] shadow_mepc_i,
     input logic [CVA6Cfg.XLEN-1:0] shadow_mcause_i,
-    // FU data from SHReg Unit is valid - EX STAGE 
-    output logic shru_valid_o,
-    // FU data for storing shadow regs - EX STAGE
-    output fu_data_t shru_fu_data_o,
-    // Store of shadow register is valid - EX STAGE
-    input logic shru_store_valid_i,
     // Shadow register unit can handle another exception - ISSUE
     output logic shru_store_ready_o,
     // Shadow register currently saving - CSR
@@ -1039,11 +1033,7 @@ module issue_read_operands
         .shadow_reg_save_i,
         .shadow_mepc_i,
         .shadow_mcause_i,
-        .shru_valid_o,
-        .shru_fu_data_o,
-        .shru_store_valid_i,
         .next_sp_o,
-        .lsu_ready_i,
         .shru_store_ready_o,
         .shru_save_level_o,
         .shru_raddr_i,
@@ -1061,7 +1051,6 @@ module issue_read_operands
         .*
     );
   end else if (CVA6Cfg.FpgaEn) begin : gen_fpga_regfile
-    assign shru_valid_o =                   1'b0;
     assign page_offset_matches_shru_o =     1'b0;
     assign shru_store_ready_o =             1'b1;
     assign dcache_req_ports_o[0].data_req = 1'b0;
@@ -1087,7 +1076,6 @@ module issue_read_operands
     );
   end else begin : gen_asic_regfile
     automatic logic _shadow_sp_o;
-    assign shru_valid_o =               '0;
     assign page_offset_matches_shru_o = '0;
     assign shru_store_ready_o =         '1;
     assign next_sp_o =                  '0;

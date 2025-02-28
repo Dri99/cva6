@@ -81,12 +81,6 @@ module issue_stage
     // CSR values to shadow - CSR Regfile
     input logic [CVA6Cfg.XLEN-1:0] shadow_mepc_i,
     input logic [CVA6Cfg.XLEN-1:0] shadow_mcause_i,
-    // FU data from SHReg Unit is valid - EX STAGE 
-    output logic shru_valid_o,
-    // FU data for storing shadow regs - EX STAGE
-    output fu_data_t shru_fu_data_o,
-    // Store of shadow register is valid - EX STAGE
-    input logic shru_store_valid_i,
     // Shadow register unit can handle another exception - ISSUE
     output logic shru_store_ready_o,
     // Shadow register currently saving - CSR
@@ -293,9 +287,6 @@ module issue_stage
       .next_sp_o,
       .shadow_mepc_i,
       .shadow_mcause_i,
-      .shru_valid_o,
-      .shru_fu_data_o,
-      .shru_store_valid_i,
       .shru_store_ready_o,
       .shru_save_level_o,
       .shru_raddr_i,

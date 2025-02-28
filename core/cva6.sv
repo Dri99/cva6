@@ -443,9 +443,6 @@ module cva6
   logic [CVA6Cfg.XLEN-1:0] shadow_mepc_csr_issue;
   logic [CVA6Cfg.XLEN-1:0] shadow_mcause_csr_issue;
   logic [CVA6Cfg.XLEN-1:0] next_sp_issue_csr;
-  logic     shru_valid_id_ex;
-  fu_data_t shru_fu_data_id_ex;
-  logic     shru_store_valid_ex_id;
   logic [11:0] page_offset_ex_issue;
   logic        page_offset_matches_shru_issue_ex;
   logic        shru_store_ready;
@@ -862,9 +859,6 @@ module cva6
       .shadow_mepc_i           (shadow_mepc_csr_issue),
       .shadow_mcause_i         (shadow_mcause_csr_issue),
       .next_sp_o               (next_sp_issue_csr),
-      .shru_valid_o            (shru_valid_id_ex),
-      .shru_fu_data_o          (shru_fu_data_id_ex),
-      .shru_store_valid_i      (shru_store_valid_ex_id),
       .shru_store_ready_o      (shru_store_ready),
       .shru_save_level_o       (shru_save_level_issue_csr),
       .shru_raddr_i            (shru_raddr_csr_issue),
@@ -1000,9 +994,6 @@ module cva6
       .stall_st_pending_i      (stall_st_pending_ex),
       .no_st_pending_o         (no_st_pending_ex),
       //Shadow Register Unit
-      .shru_valid_i            (shru_valid_id_ex),
-      .shru_fu_data_i          (shru_fu_data_id_ex),
-      .shru_store_valid_o      (shru_store_valid_ex_id),
       .page_offset_o             (page_offset_ex_issue),
       .page_offset_matches_shru_i(page_offset_matches_shru_issue_ex),
       // FPU

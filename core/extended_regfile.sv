@@ -45,12 +45,6 @@ module extended_regfile
     // CSR values to shadow - CSR Regfile
     input  logic [DATA_WIDTH-1:0] shadow_mepc_i,
     input  logic [DATA_WIDTH-1:0] shadow_mcause_i,
-    // FU data from SHReg Unit is valid - EX STAGE 
-    output logic     shru_valid_o,
-    // FU data for storing shadow regs - EX STAGE
-    output fu_data_t shru_fu_data_o,
-    // Store of shadow register is valid - EX STAGE
-    input  logic     shru_store_valid_i,
     // Shadow register unit can handle another exception - ISSUE
     output logic shru_store_ready_o,
     // Shadow register currently saving - CSR
@@ -58,8 +52,6 @@ module extended_regfile
     // Shadow Register read port - CSR
     input  logic [4:0] shru_raddr_i,
     output logic [DATA_WIDTH-1:0] shru_rdata_o,
-    // LSU can accept a new instruction
-    input  logic     lsu_ready_i,
     // Page offset Load unit wants to load - EX STAGE
     input logic [11:0] page_offset_i,
     // Page offset is being saved in ShRU - EX STAGE
@@ -150,10 +142,6 @@ module extended_regfile
       .mret_valid_i        (shru_mret_commit_valid_i),
       .mret_ready_o        (shru_mret_commit_ready_o),
       .shadow_load_esf_i   (shru_load_esf_i),
-      .shru_valid_o,
-      .shru_fu_data_o,
-      .shru_store_valid_i,
-      .lsu_ready_i,
       .page_offset_i,
       .page_offset_matches_shru_o,
       .dcache_req_ports_i,
