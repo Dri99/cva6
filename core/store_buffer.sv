@@ -46,6 +46,7 @@ module store_buffer
     input logic [(CVA6Cfg.XLEN/8)-1:0] be_i,  // byte enable in
     input logic [1:0] data_size_i,  // type of request we are making (e.g.: bytes to write)
     input logic commit_unneeded_i,    // request can go without receiving a commit
+    output logic definitive_ready_o,  // Can accept a definitive store
 
     // D$ interface
     input  dcache_req_o_t req_port_i,
@@ -125,6 +126,10 @@ module store_buffer
       speculative_status_cnt_n = 'b0;
     end
 
+    // we are ready if the speculative and the commit queue have a space left
+    ready_o = (speculative_status_cnt_n < (DEPTH_SPEC)) || commit_i;
+    
+    definitive_ready_o = (commit_status_cnt_n < (DEPTH_COMMIT) || req_port_i.data_gnt) && !commit_i;
   end
 
   // ----------------------------------------
@@ -186,7 +191,7 @@ module store_buffer
       commit_queue_n[commit_write_pointer_q] = speculative_queue_q[speculative_read_pointer_q];
       commit_write_pointer_n = commit_write_pointer_n + 1'b1;
       commit_status_cnt++;
-    end else if(valid_i && commit_unneeded_i && commit_ready_o) begin 
+    end else if(valid_i && commit_unneeded_i && definitive_ready_o) begin 
       commit_queue_n[commit_write_pointer_q].address = paddr_i;
       commit_queue_n[commit_write_pointer_q].data = data_i;
       commit_queue_n[commit_write_pointer_q].be = be_i;
@@ -199,15 +204,6 @@ module store_buffer
     commit_status_cnt_n = commit_status_cnt;
   end
 
-  always_comb begin : ready_o_generation
-    if(!commit_unneeded_i)
-      // we are ready if the speculative and the commit queue have a space left
-      ready_o = (speculative_status_cnt_n < (DEPTH_SPEC)) || commit_i;
-    else
-      // or if the commit queue has space and no shift happens from speculative to commit
-      // commit_i gives precedence to standard stores
-      ready_o = (commit_status_cnt_n < (DEPTH_COMMIT) || req_port_i.data_gnt) && !commit_i;
-  end
   // ------------------
   // Address Checker
   // ------------------

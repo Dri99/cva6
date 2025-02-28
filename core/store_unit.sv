@@ -280,14 +280,14 @@ module store_unit
   end
 
   logic store_buffer_valid, amo_buffer_valid;
-  logic store_buffer_ready, amo_buffer_ready;
+  logic store_buffer_ready, amo_buffer_ready, definitive_buffer_ready;
 
   // multiplex between store unit and amo buffer
   assign store_buffer_valid = st_valid & (!CVA6Cfg.RVA || (amo_op_q == AMO_NONE));
   assign amo_buffer_valid = st_valid & (CVA6Cfg.RVA && (amo_op_q != AMO_NONE));
 
   assign st_ready = store_buffer_ready & amo_buffer_ready;
-  assign committed_store_d = lsu_ctrl_i.operation == SHSR ? 1'b1 : 1'b0;
+  assign committed_store_d = (lsu_ctrl_i.operation == SHSR && lsu_ctrl_i.valid) ? 1'b1 : 1'b0;
 
   // ---------------
   // Store Queue
@@ -321,6 +321,7 @@ module store_unit
       .be_i                 (st_be_q),
       .data_size_i          (st_data_size_q),
       .commit_unneeded_i    (committed_store_q),
+      .definitive_ready_o   ()
       .req_port_i           (req_port_i),
       .req_port_o           (req_port_o)
   );
