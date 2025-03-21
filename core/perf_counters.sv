@@ -86,19 +86,21 @@ module perf_counters
   logic [CVA6Cfg.NrCommitPorts-1:0] fp_event;
   logic [CVA6Cfg.NrCommitPorts-1:0] mret_event;
   logic [CVA6Cfg.NrCommitPorts-1:0] dret_event;
+  logic [CVA6Cfg.NrCommitPorts-1:0] mret_stall_event;
   logic latch_shru_store_ready;
   //Multiplexer
   always_comb begin : Mux
     events[MHPMCounterNum:1] = '{default: 0};
-    load_event = '{default: 0};
-    store_event = '{default: 0};
-    branch_event = '{default: 0};
-    call_event = '{default: 0};
-    return_event = '{default: 0};
-    int_event = '{default: 0};
-    fp_event = '{default: 0};
-    mret_event = '{default: 0};
-    dret_event = '{default: 0};
+    load_event =               '{default: 0};
+    store_event =              '{default: 0};
+    branch_event =             '{default: 0};
+    call_event =               '{default: 0};
+    return_event =             '{default: 0};
+    int_event =                '{default: 0};
+    fp_event =                 '{default: 0};
+    mret_event =               '{default: 0};
+    dret_event =               '{default: 0};
+    mret_stall_event =         '{default: 0};
 
     for (int unsigned j = 0; j < CVA6Cfg.NrCommitPorts; j++) begin
       load_event[j] = commit_ack_i[j] & (commit_instr_i[j].fu == LOAD);
@@ -110,6 +112,7 @@ module perf_counters
       fp_event[j] = commit_ack_i[j] & (commit_instr_i[j].fu == FPU || commit_instr_i[j].fu == FPU_VEC);
       mret_event[j] = commit_ack_i[j] & (commit_instr_i[j].op == MRET );
       dret_event[j] = commit_ack_i[j] & (commit_instr_i[j].op == DRET );
+      mret_stall_event[j] = !commit_ack_i[j] & commit_instr_i[j].valid & !commit_instr_i[j].ex.valid & (commit_instr_i[j].fu == CSR) & (commit_instr_i[j].op == MRET);
     end
 
     for (int unsigned i = 1; i <= MHPMCounterNum; i++) begin
@@ -148,6 +151,7 @@ module perf_counters
         5'b11001: events[i] = shadow_reg_activation_i; //25
         5'b11010: events[i] = latch_shru_store_ready & !shru_store_ready_i; //26
         5'b11011: events[i] = !latch_shru_store_ready & shru_store_ready_i; //27
+        5'b11100: events[i] = |mret_stall_event; //Mret stalls 28
         default: events[i] = 0;
       endcase
     end
